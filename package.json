@@ -1,0 +1,20 @@
+{
+  "name": "hnovel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NSFW小说AI写作平台 - AI-powered NSFW novel writing platform",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:web": "cd web && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "cd web && npm run build",
+    "build:server": "cd server && npm run build",
+    "lint": "npm run lint:web && npm run lint:server",
+    "test": "npm run test:server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0"
+  }
+}

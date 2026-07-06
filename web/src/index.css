@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #b8956a;
+  --color-primary-dark: #9a7b52;
+  --color-primary-light: #e8d9c8;
+  --color-primary-bg: #faf6f0;
+  --color-primary-border: #e0d3c2;
+  --color-bg-dark: #f5f2ed;
+  --color-bg-card: #ffffff;
+  --color-bg-card-hover: #faf8f5;
+  --color-bg-sidebar: #2c2416;
+  --color-text-primary: #2c2416;
+  --color-text-secondary: #6b6258;
+  --color-text-muted: #9c9488;
+  --color-text-sidebar: #c8bfb0;
+  --color-text-sidebar-active: #ffffff;
+  --color-border: #e5e0d8;
+  --color-border-light: #f0ece5;
+  --color-success: #7c9a6e;
+  --color-success-bg: #f2f7f0;
+  --color-warning: #c4944a;
+  --color-danger: #c4665a;
+  --color-danger-bg: #faf4f3;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-up: slide-up 0.35s ease-out;
+  --animate-slide-down: slide-down 0.25s ease-out;
+  --animate-scale-in: scale-in 0.25s ease-out;
+  --animate-skeleton: skeleton 1.5s ease-in-out infinite;
+  --animate-fade-in-up: fade-in-up 0.4s ease-out;
+}
+
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes slide-down { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes scale-in { from { opacity: 0; transform: scale(0.95) } to { opacity: 1; transform: scale(1) } }
+@keyframes fade-in-up { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes skeleton { 0%, 100% { opacity: 1 } 50% { opacity: .4 } }
+
+body {
+  background-color: var(--color-bg-dark);
+  color: var(--color-text-primary);
+  margin: 0;
+  font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+}
+
+#root { min-height: 100vh }
+
+/* Base page enter animation */
+main > div { animation: var(--animate-slide-up) }
+
+/* Card animations */
+.card-enter {
+  animation: var(--animate-fade-in-up);
+  animation-fill-mode: both;
+}
+.card-enter:nth-child(1) { animation-delay: 0.05s }
+.card-enter:nth-child(2) { animation-delay: 0.1s }
+.card-enter:nth-child(3) { animation-delay: 0.15s }
+.card-enter:nth-child(4) { animation-delay: 0.2s }
+.card-enter:nth-child(5) { animation-delay: 0.25s }
+.card-enter:nth-child(6) { animation-delay: 0.3s }
+.card-enter:nth-child(7) { animation-delay: 0.35s }
+.card-enter:nth-child(8) { animation-delay: 0.4s }
+
+/* Hover lift */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Button hover scale */
+.btn-press {
+  transition: transform 0.1s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.btn-press:active { transform: scale(0.97) }
+
+/* Modal backdrop */
+.modal-enter { animation: fade-in 0.2s ease-out }
+.modal-enter > * { animation: scale-in 0.25s ease-out }
+
+/* Sidebar link slide */
+nav a {
+  transition: all 0.2s ease;
+}
+nav a:hover { transform: translateX(2px) }
+
+/* Loading skeleton */
+.skeleton {
+  animation: var(--animate-skeleton);
+  background: linear-gradient(90deg, var(--color-bg-dark) 25%, var(--color-border-light) 50%, var(--color-bg-dark) 75%);
+  background-size: 200% 100%;
+  border-radius: 0.5rem;
+}
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg) } }
+
+::-webkit-scrollbar { width: 6px }
+::-webkit-scrollbar-track { background: var(--color-bg-dark) }
+::-webkit-scrollbar-thumb { background: #d9d3ca; border-radius: 3px }
+::-webkit-scrollbar-thumb:hover { background: #b8b0a4 }
