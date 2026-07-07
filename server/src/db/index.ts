@@ -39,6 +39,7 @@ export function initDatabase(): void {
       synopsis TEXT,
       tone_style TEXT,
       reference_style TEXT DEFAULT '',
+      style_profile TEXT DEFAULT '',
       themes TEXT DEFAULT '[]',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
@@ -165,4 +166,5 @@ export function initDatabase(): void {
 
   // Migration: add reference_style to existing databases
   try { d.exec(`ALTER TABLE stories ADD COLUMN reference_style TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE stories ADD COLUMN style_profile TEXT DEFAULT ''`) } catch {}
 }

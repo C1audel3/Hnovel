@@ -77,7 +77,7 @@ storyRouter.put('/:id', validateBody(storyUpdateSchema), (req: Request, res: Res
   }
 
   const fields = ['title', 'genre', 'sub_genre', 'setting_era', 'status', 'rating',
-    'nsfw_tags', 'explicit_level', 'target_audience', 'pov', 'tense', 'synopsis', 'tone_style', 'reference_style', 'themes']
+    'nsfw_tags', 'explicit_level', 'target_audience', 'pov', 'tense', 'synopsis', 'tone_style', 'reference_style', 'style_profile', 'themes']
   const updates: string[] = []
   const values: any[] = []
 
@@ -89,6 +89,12 @@ storyRouter.put('/:id', validateBody(storyUpdateSchema), (req: Request, res: Res
       updates.push(`${field} = ?`)
       values.push(value)
     }
+  }
+
+  // A changed source sample invalidates the previously analyzed profile.
+  if (req.body.reference_style !== undefined && req.body.style_profile === undefined) {
+    updates.push('style_profile = ?')
+    values.push('')
   }
 
   if (updates.length > 0) {
@@ -110,4 +116,24 @@ storyRouter.delete('/:id', (req: Request, res: Response) => {
   }
   db.prepare('DELETE FROM stories WHERE id = ?').run(String(req.params.id))
   res.json({ deleted: true })
+})
+
+storyRouter.post('/:id/analyze-style', async (req: Request, res: Response) => {
+  const db = getDatabase()
+  const story = db.prepare('SELECT reference_style FROM stories WHERE id = ?').get(String(req.params.id)) as any
+  if (!story) return res.status(404).json({ error: 'Story not found', code: 'NOT_FOUND' })
+  const referenceText = String(story.reference_style || '').trim()
+  if (referenceText.length < 200) {
+    return res.status(400).json({ error: '参考文风至少需要 200 个字符才能分析', code: 'REFERENCE_TOO_SHORT' })
+  }
+
+  try {
+    const { analyzeWritingStyle } = await import('../agents/style-analyzer.js')
+    const profile = await analyzeWritingStyle(referenceText)
+    db.prepare("UPDATE stories SET style_profile = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(profile, String(req.params.id))
+    res.json({ profile, sourceLength: referenceText.length, analyzedLength: Math.min(referenceText.length, 12000) })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || '风格分析失败', code: 'STYLE_ANALYSIS_FAILED' })
+  }
 })

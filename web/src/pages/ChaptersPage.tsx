@@ -1,13 +1,30 @@
 import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { fetchChapters } from '../lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { deleteChapter, fetchChapters, getApiErrorMessage } from '../lib/api'
 import { Icon } from '../components/Icon'
 
 export function ChaptersPage() {
   const { id } = useParams<{ id: string }>()
+  const queryClient = useQueryClient()
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', id], queryFn: () => fetchChapters(id!), enabled: !!id,
   })
+  const deleteMutation = useMutation({
+    mutationFn: (num: number) => deleteChapter(id!, num),
+    onSuccess: (_data, num) => {
+      queryClient.removeQueries({ queryKey: ['chapter', id, String(num)] })
+      queryClient.invalidateQueries({ queryKey: ['chapters', id] })
+      queryClient.invalidateQueries({ queryKey: ['story', id] })
+      queryClient.invalidateQueries({ queryKey: ['stories'] })
+    },
+    onError: error => alert('删除章节失败: ' + getApiErrorMessage(error)),
+  })
+
+  const handleDelete = (num: number, title: string) => {
+    if (confirm(`确认删除第${num}章「${title}」？此操作无法撤销。`)) {
+      deleteMutation.mutate(num)
+    }
+  }
 
   return (
     <div>
@@ -74,6 +91,14 @@ export function ChaptersPage() {
                   className="text-text-muted hover:text-primary transition-colors opacity-0 group-hover:opacity-100 p-1">
                   <Icon name="file" className="w-4 h-4" />
                 </a>
+                <button type="button"
+                  onClick={() => handleDelete(ch.chapter_number, ch.title)}
+                  disabled={deleteMutation.isPending && deleteMutation.variables === ch.chapter_number}
+                  title="删除此章"
+                  aria-label={`删除第${ch.chapter_number}章`}
+                  className="text-text-muted hover:text-danger disabled:opacity-40 transition-colors opacity-0 group-hover:opacity-100 p-1">
+                  <Icon name="trash" className="w-4 h-4" />
+                </button>
               </div>
             </div>
           ))}

@@ -36,6 +36,11 @@ export async function updateStory(id: string, updates: Partial<Story>): Promise<
   return data
 }
 
+export async function analyzeStoryStyle(id: string): Promise<{ profile: string; sourceLength: number; analyzedLength: number }> {
+  const { data } = await api.post(`/stories/${id}/analyze-style`)
+  return data
+}
+
 export async function deleteStory(id: string): Promise<void> {
   await api.delete(`/stories/${id}`)
 }
@@ -54,6 +59,10 @@ export async function fetchChapter(storyId: string, num: number): Promise<Chapte
 export async function saveChapter(storyId: string, num: number, chapter: Partial<Chapter>): Promise<Chapter> {
   const { data } = await api.put(`/stories/${storyId}/chapters/${num}`, chapter)
   return data
+}
+
+export async function deleteChapter(storyId: string, num: number): Promise<void> {
+  await api.delete(`/stories/${storyId}/chapters/${num}`)
 }
 
 // AI Generation

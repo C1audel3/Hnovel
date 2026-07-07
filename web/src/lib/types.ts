@@ -14,6 +14,7 @@ export interface Story {
   synopsis?: string
   tone_style?: string
   reference_style?: string
+  style_profile?: string
   themes: string[]
   chapter_count: number
   character_count: number
@@ -77,7 +78,9 @@ export interface GenerateOptions {
   minWords?: number
   maxWords?: number
   additionalInstructions?: string
+  outlineDirection?: string
   referenceStyle?: string
+  styleProfile?: string
   chapterCount?: number
   chapterNumber?: number
   chapterTitle?: string

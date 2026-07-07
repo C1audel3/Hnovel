@@ -50,6 +50,7 @@ export const storyUpdateSchema = storyCreateSchema.partial().extend({
   status: z.enum(['planning', 'in-progress', 'completed', 'hiatus']).optional(),
   tone_style: z.string().max(10000).optional(),
   reference_style: z.string().max(100000).optional(),
+  style_profile: z.string().max(20000).optional(),
 })
 
 export const chapterSchema = z.object({
@@ -72,7 +73,9 @@ export const generateSchema = z.object({
   minWords: z.number().int().min(100).max(100000).optional(),
   maxWords: z.number().int().min(100).max(100000).optional(),
   additionalInstructions: z.string().max(100000).optional(),
+  outlineDirection: z.string().max(20000).optional(),
   referenceStyle: z.string().max(100000).optional(),
+  styleProfile: z.string().max(20000).optional(),
   chapterCount: z.number().int().min(1).max(50).optional(),
   chapterNumber: z.number().int().positive().optional(),
   chapterTitle: z.string().max(300).optional(),

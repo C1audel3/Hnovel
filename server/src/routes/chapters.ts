@@ -67,8 +67,12 @@ chapterRouter.put('/:id/chapters/:num', validateChapterNumber, validateBody(chap
 // Delete chapter
 chapterRouter.delete('/:id/chapters/:num', validateChapterNumber, (req: Request, res: Response) => {
   const db = getDatabase()
-  db.prepare('DELETE FROM chapters WHERE story_id = ? AND chapter_number = ?')
+  const result = db.prepare('DELETE FROM chapters WHERE story_id = ? AND chapter_number = ?')
     .run(getId(req), getNum(req))
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'Chapter not found', code: 'NOT_FOUND' })
+  }
+  db.prepare("UPDATE stories SET updated_at = datetime('now') WHERE id = ?").run(getId(req))
   res.json({ deleted: true })
 })
 

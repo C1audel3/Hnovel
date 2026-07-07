@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { OutlineChapter, GeneratedChapter } from '../lib/types'
 
 interface WritePageState {
+  activeStoryId: string | null
   phase: 'idle' | 'outline' | 'writing'
   outlineChapters: OutlineChapter[]
   generatedChapters: Set<number>
@@ -14,14 +15,16 @@ interface WritePageState {
   minWords: number
   maxWords: number
   focusCharacters: string
+  outlineDirection: string
   chapterPrompts: Record<number, string>
 
   // Actions
+  switchStory: (storyId: string) => void
   setPhase: (phase: 'idle' | 'outline' | 'writing') => void
   setOutlineChapters: (chapters: OutlineChapter[]) => void
   addGeneratedChapter: (num: number) => void
   setGeneratedChapter: (ch: GeneratedChapter | null) => void
-  setConfig: (config: Partial<Pick<WritePageState, 'chapterCount' | 'intensityLevel' | 'explicitLevel' | 'minWords' | 'maxWords' | 'focusCharacters' | 'chapterPrompts'>>) => void
+  setConfig: (config: Partial<Pick<WritePageState, 'chapterCount' | 'intensityLevel' | 'explicitLevel' | 'minWords' | 'maxWords' | 'focusCharacters' | 'outlineDirection' | 'chapterPrompts'>>) => void
   setChapterPrompt: (num: number, prompt: string) => void
   updateChapter: (num: number, updates: Partial<Pick<OutlineChapter, 'title' | 'summary' | 'nsfw'>>) => void
   deleteChapter: (num: number) => void
@@ -30,6 +33,7 @@ interface WritePageState {
 }
 
 const initialState = {
+  activeStoryId: null as string | null,
   phase: 'idle' as const,
   outlineChapters: [] as OutlineChapter[],
   generatedChapters: new Set<number>(),
@@ -40,12 +44,16 @@ const initialState = {
   minWords: 2000,
   maxWords: 5000,
   focusCharacters: '',
+  outlineDirection: '',
   chapterPrompts: {} as Record<number, string>,
 }
 
 export const useWriteStore = create<WritePageState>((set) => ({
   ...initialState,
 
+  switchStory: (storyId) => set((state) => state.activeStoryId === storyId
+    ? state
+    : { ...initialState, activeStoryId: storyId }),
   setPhase: (phase) => set({ phase }),
   setOutlineChapters: (chapters) => set({ outlineChapters: chapters, generatedChapters: new Set(), generatedChapter: null }),
   addGeneratedChapter: (num) => set((s) => ({ generatedChapters: new Set(s.generatedChapters).add(num) })),
@@ -71,5 +79,5 @@ export const useWriteStore = create<WritePageState>((set) => ({
       }],
     }
   }),
-  reset: () => set(initialState),
+  reset: () => set((state) => ({ ...initialState, activeStoryId: state.activeStoryId })),
 }))

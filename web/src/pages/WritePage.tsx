@@ -16,11 +16,12 @@ export function WritePage() {
   const nextChapterNum = existingCount + 1
 
   const {
+    switchStory,
     phase, setPhase, outlineChapters, setOutlineChapters,
     generatedChapters, addGeneratedChapter, generatedChapter,
     setGeneratedChapter, setConfig, updateChapter, deleteChapter, reset,
     chapterCount, minWords, maxWords,
-    focusCharacters, chapterPrompts, setChapterPrompt,
+    focusCharacters, outlineDirection, chapterPrompts, setChapterPrompt,
   } = useWriteStore()
 
   const [generating, setGenerating] = useState(false)
@@ -29,7 +30,15 @@ export function WritePage() {
   const [editForm, setEditForm] = useState({ title: '', summary: '' })
 
   useEffect(() => {
-    if (!savedOutline) return
+    if (!id) return
+    switchStory(id)
+    setGenerating(false)
+    setWritingIndex(-1)
+    setEditingChapter(-1)
+  }, [id, switchStory])
+
+  useEffect(() => {
+    if (!id || !savedOutline || useWriteStore.getState().activeStoryId !== id) return
     setOutlineChapters(savedOutline)
     for (const chapter of existingChapters || []) addGeneratedChapter(chapter.chapter_number)
     setPhase(savedOutline.length > 0 ? 'outline' : 'idle')
@@ -41,10 +50,12 @@ export function WritePage() {
   }
 
   const handleGenerateOutline = async () => {
+    const requestStoryId = id!
     setGenerating(true); setOutlineChapters([])
     try {
-      const result = await generateOutline(id!, {
+      const result = await generateOutline(requestStoryId, {
         chapterCount, intensityLevel: 10, explicitLevel: 'graphic',
+        outlineDirection: outlineDirection.trim() || undefined,
         focusCharacters: focusCharacters ? focusCharacters.split(',').map(s => s.trim()).filter(Boolean) : undefined,
         additionalInstructions: (() => {
           const entries = Object.entries(chapterPrompts).filter(([, v]) => v.trim())
@@ -52,21 +63,26 @@ export function WritePage() {
           return entries.map(([k, v]) => `第${k}章: ${v}`).join('\n')
         })(),
       })
-      setOutlineChapters(result.chapters)
-      setPhase('outline')
       try {
-        await persistOutline(result.chapters)
+        await saveOutline(requestStoryId, result.chapters)
       } catch (error) {
         alert('大纲已生成，但保存失败: ' + getApiErrorMessage(error))
       }
-    } catch (error) { alert('AI大纲生成失败: ' + getApiErrorMessage(error)) }
-    finally { setGenerating(false) }
+      if (useWriteStore.getState().activeStoryId !== requestStoryId) return
+      setOutlineChapters(result.chapters)
+      setPhase('outline')
+    } catch (error) {
+      if (useWriteStore.getState().activeStoryId === requestStoryId) alert('AI大纲生成失败: ' + getApiErrorMessage(error))
+    } finally {
+      if (useWriteStore.getState().activeStoryId === requestStoryId) setGenerating(false)
+    }
   }
 
   const handleGenerateChapter = async (chap: OutlineChapter) => {
+    const requestStoryId = id!
     setWritingIndex(chap.number); setGenerating(true); setGeneratedChapter(null)
     try {
-      const result = await generateChapter(id!, {
+      const result = await generateChapter(requestStoryId, {
         chapterNumber: chap.number, chapterTitle: chap.title,
         chapterSummary: chap.summary,
         intensityLevel: chap.nsfw ? 10 : 2,
@@ -74,10 +90,15 @@ export function WritePage() {
         maxWords: chap.estimatedWords + 1000,
         focusCharacters: focusCharacters ? focusCharacters.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       })
-      setGeneratedChapter(result)
-      addGeneratedChapter(chap.number)
-    } catch (error) { alert('章节生成失败: ' + getApiErrorMessage(error)) }
-    finally { setGenerating(false) }
+      if (useWriteStore.getState().activeStoryId === requestStoryId) {
+        setGeneratedChapter(result)
+        addGeneratedChapter(chap.number)
+      }
+    } catch (error) {
+      if (useWriteStore.getState().activeStoryId === requestStoryId) alert('章节生成失败: ' + getApiErrorMessage(error))
+    } finally {
+      if (useWriteStore.getState().activeStoryId === requestStoryId) setGenerating(false)
+    }
   }
 
   const toggleNsfw = (chapNum: number) => {
@@ -179,6 +200,18 @@ export function WritePage() {
                 <input type="text" value={focusCharacters} placeholder="角色名, 逗号分隔"
                   onChange={e => setConfig({ focusCharacters: e.target.value })}
                   className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-xl text-sm focus:border-primary focus:outline-none placeholder:text-text-muted" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-primary mb-1">
+                  本批章节主体方向 <span className="text-text-muted">(整体目标)</span>
+                </label>
+                <textarea value={outlineDirection}
+                  onChange={e => setConfig({ outlineDirection: e.target.value })}
+                  rows={4}
+                  placeholder="例如：这五章主要完成主角加入宗门、与核心女主建立初步信任，并在最后发现宗门内部的阴谋线索。"
+                  className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-xl text-sm focus:border-primary focus:outline-none resize-none placeholder:text-text-muted" />
+                <p className="text-xs text-text-muted mt-1">AI 会让本批所有章节围绕这个方向推进，并在最后一章形成阶段性落点。</p>
               </div>
 
               <div>
