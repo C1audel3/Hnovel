@@ -1,10 +1,19 @@
 import axios from 'axios'
-import type { Story, Chapter, GenerateOptions, GeneratedChapter, GeneratedOutline } from './types'
+import type { Story, Chapter, GenerateOptions, GeneratedChapter, GeneratedOutline, OutlineChapter, PlotData, StoryArc, TimelineEvent, WorldItem } from './types'
 
 const api = axios.create({
   baseURL: '/api',
   timeout: 600000, // 10 minutes for AI generation
 })
+
+export function getApiErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as { error?: string; details?: Array<{ field: string; message: string }> } | undefined
+    if (data?.details?.length) return data.details.map(item => `${item.field}: ${item.message}`).join('；')
+    return data?.error || error.message
+  }
+  return error instanceof Error ? error.message : '未知错误'
+}
 
 // Stories
 export async function fetchStories(): Promise<Story[]> {
@@ -56,6 +65,40 @@ export async function generateOutline(storyId: string, options: GenerateOptions)
 export async function generateChapter(storyId: string, options: GenerateOptions): Promise<GeneratedChapter> {
   const { data } = await api.post(`/stories/${storyId}/chapters/generate`, options)
   return data
+}
+
+export async function fetchWorldItems(storyId: string): Promise<WorldItem[]> {
+  return (await api.get(`/stories/${storyId}/world-items`)).data
+}
+export async function createWorldItem(storyId: string, item: Omit<WorldItem, 'id' | 'status'>): Promise<WorldItem> {
+  return (await api.post(`/stories/${storyId}/world-items`, item)).data
+}
+export async function deleteWorldItem(storyId: string, itemId: string): Promise<void> {
+  await api.delete(`/stories/${storyId}/world-items/${itemId}`)
+}
+export async function fetchPlot(storyId: string): Promise<PlotData> {
+  return (await api.get(`/stories/${storyId}/plot`)).data
+}
+export async function savePlotStructure(storyId: string, structureModel: string): Promise<void> {
+  await api.put(`/stories/${storyId}/plot/structure`, { structureModel })
+}
+export async function createStoryArc(storyId: string, arc: Omit<StoryArc, 'id' | 'status'>): Promise<StoryArc> {
+  return (await api.post(`/stories/${storyId}/plot/arcs`, arc)).data
+}
+export async function deleteStoryArc(storyId: string, arcId: string): Promise<void> {
+  await api.delete(`/stories/${storyId}/plot/arcs/${arcId}`)
+}
+export async function createTimelineEvent(storyId: string, event: Omit<TimelineEvent, 'id'>): Promise<TimelineEvent> {
+  return (await api.post(`/stories/${storyId}/plot/events`, event)).data
+}
+export async function deleteTimelineEvent(storyId: string, eventId: string): Promise<void> {
+  await api.delete(`/stories/${storyId}/plot/events/${eventId}`)
+}
+export async function fetchOutline(storyId: string): Promise<OutlineChapter[]> {
+  return (await api.get(`/stories/${storyId}/outline`)).data
+}
+export async function saveOutline(storyId: string, chapters: OutlineChapter[]): Promise<void> {
+  await api.put(`/stories/${storyId}/outline`, { chapters })
 }
 
 // Export

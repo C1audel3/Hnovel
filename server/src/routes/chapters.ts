@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { getDatabase } from '../db/index.js'
 import { randomUUID } from 'crypto'
+import { chapterSchema, generateSchema, validateBody, validateChapterNumber } from '../middleware/validation.js'
 
 export const chapterRouter = Router({ mergeParams: true })
 
@@ -17,7 +18,7 @@ chapterRouter.get('/:id/chapters', (req: Request, res: Response) => {
 })
 
 // Get specific chapter
-chapterRouter.get('/:id/chapters/:num', (req: Request, res: Response) => {
+chapterRouter.get('/:id/chapters/:num', validateChapterNumber, (req: Request, res: Response) => {
   const db = getDatabase()
   const chapter = db.prepare(`
     SELECT * FROM chapters WHERE story_id = ? AND chapter_number = ?
@@ -30,7 +31,7 @@ chapterRouter.get('/:id/chapters/:num', (req: Request, res: Response) => {
 })
 
 // Create/update chapter
-chapterRouter.put('/:id/chapters/:num', (req: Request, res: Response) => {
+chapterRouter.put('/:id/chapters/:num', validateChapterNumber, validateBody(chapterSchema), (req: Request, res: Response) => {
   const db = getDatabase()
   const existing = db.prepare(`
     SELECT * FROM chapters WHERE story_id = ? AND chapter_number = ?
@@ -64,7 +65,7 @@ chapterRouter.put('/:id/chapters/:num', (req: Request, res: Response) => {
 })
 
 // Delete chapter
-chapterRouter.delete('/:id/chapters/:num', (req: Request, res: Response) => {
+chapterRouter.delete('/:id/chapters/:num', validateChapterNumber, (req: Request, res: Response) => {
   const db = getDatabase()
   db.prepare('DELETE FROM chapters WHERE story_id = ? AND chapter_number = ?')
     .run(getId(req), getNum(req))
@@ -72,23 +73,23 @@ chapterRouter.delete('/:id/chapters/:num', (req: Request, res: Response) => {
 })
 
 // AI generate chapter outline
-chapterRouter.post('/:id/chapters/generate-outline', async (req: Request, res: Response) => {
+chapterRouter.post('/:id/chapters/generate-outline', validateBody(generateSchema), async (req: Request, res: Response) => {
   const { generateChapterOutline } = await import('../agents/chapter-generator.js')
   try {
     const outline = await generateChapterOutline(getId(req), req.body)
     res.json(outline)
   } catch (err: any) {
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: err.message, code: 'AI_OUTLINE_GENERATION_FAILED' })
   }
 })
 
 // AI generate full chapter
-chapterRouter.post('/:id/chapters/generate', async (req: Request, res: Response) => {
+chapterRouter.post('/:id/chapters/generate', validateBody(generateSchema), async (req: Request, res: Response) => {
   const { generateChapter } = await import('../agents/chapter-generator.js')
   try {
     const chapter = await generateChapter(getId(req), req.body)
     res.json(chapter)
   } catch (err: any) {
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: err.message, code: 'AI_CHAPTER_GENERATION_FAILED' })
   }
 })

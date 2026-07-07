@@ -103,10 +103,64 @@ export function initDatabase(): void {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS world_items (
+      id TEXT PRIMARY KEY,
+      story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+      category TEXT NOT NULL,
+      name TEXT NOT NULL,
+      item_type TEXT NOT NULL DEFAULT 'other',
+      description TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS plot_settings (
+      story_id TEXT PRIMARY KEY REFERENCES stories(id) ON DELETE CASCADE,
+      structure_model TEXT NOT NULL DEFAULT 'qichengzhuanhe',
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS story_arcs (
+      id TEXT PRIMARY KEY,
+      story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      arc_type TEXT NOT NULL DEFAULT 'main',
+      characters TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS timeline_events (
+      id TEXT PRIMARY KEY,
+      story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+      chapter TEXT DEFAULT '',
+      description TEXT NOT NULL,
+      arc_id TEXT REFERENCES story_arcs(id) ON DELETE CASCADE,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS outline_chapters (
+      id TEXT PRIMARY KEY,
+      story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+      chapter_number INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT DEFAULT '',
+      is_nsfw INTEGER DEFAULT 0,
+      estimated_words INTEGER DEFAULT 3000,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(story_id, chapter_number)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_characters_story ON characters(story_id);
     CREATE INDEX IF NOT EXISTS idx_chapters_story ON chapters(story_id);
     CREATE INDEX IF NOT EXISTS idx_relationships_story ON character_relationships(story_id);
     CREATE INDEX IF NOT EXISTS idx_continuity_story ON continuity_state(story_id);
+    CREATE INDEX IF NOT EXISTS idx_world_items_story ON world_items(story_id);
+    CREATE INDEX IF NOT EXISTS idx_story_arcs_story ON story_arcs(story_id);
+    CREATE INDEX IF NOT EXISTS idx_timeline_events_story ON timeline_events(story_id);
+    CREATE INDEX IF NOT EXISTS idx_outline_chapters_story ON outline_chapters(story_id);
   `)
 
   // Migration: add reference_style to existing databases

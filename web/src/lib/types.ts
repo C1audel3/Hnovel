@@ -104,3 +104,9 @@ export interface GeneratedChapter {
   content: string
   wordCount: number
 }
+
+export type WorldCategory = 'locations' | 'systems' | 'factions' | 'artifacts'
+export interface WorldItem { id: string; category: WorldCategory; name: string; type: string; description: string; status: string }
+export interface StoryArc { id: string; name: string; type: string; characters: string; description: string; status: string }
+export interface TimelineEvent { id: string; chapter: string; description: string; arc: string }
+export interface PlotData { structureModel: string; arcs: StoryArc[]; events: TimelineEvent[] }

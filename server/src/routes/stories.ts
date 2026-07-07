@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { getDatabase } from '../db/index.js'
 import { randomUUID } from 'crypto'
 import fs from 'fs'
+import { storyCreateSchema, storyUpdateSchema, validateBody } from '../middleware/validation.js'
 
 export const storyRouter = Router()
 
@@ -37,7 +38,7 @@ storyRouter.get('/:id', (req: Request, res: Response) => {
 })
 
 // Create new story
-storyRouter.post('/', (req: Request, res: Response) => {
+storyRouter.post('/', validateBody(storyCreateSchema), (req: Request, res: Response) => {
   const db = getDatabase()
   const id = randomUUID()
   const {
@@ -68,7 +69,7 @@ storyRouter.post('/', (req: Request, res: Response) => {
 })
 
 // Update story
-storyRouter.put('/:id', (req: Request, res: Response) => {
+storyRouter.put('/:id', validateBody(storyUpdateSchema), (req: Request, res: Response) => {
   const db = getDatabase()
   const existing = db.prepare('SELECT * FROM stories WHERE id = ?').get(String(req.params.id))
   if (!existing) {

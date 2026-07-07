@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Icon } from '../components/Icon'
+import { createWorldItem, deleteWorldItem, fetchWorldItems, getApiErrorMessage } from '../lib/api'
+import type { WorldCategory, WorldItem } from '../lib/types'
 
-type Tab = 'locations' | 'systems' | 'factions' | 'artifacts'
-
-interface WorldItem {
-  id: string; name: string; type: string; description: string; status: string;
-}
+type Tab = WorldCategory
 
 const tabs: { id: Tab; label: string; icon: string; desc: string }[] = [
   { id: 'locations', label: '地点', icon: 'mapPin', desc: '城市、洞府、秘境、温泉、青楼等' },
@@ -14,13 +13,6 @@ const tabs: { id: Tab; label: string; icon: string; desc: string }[] = [
   { id: 'factions', label: '势力', icon: 'building', desc: '宗门、世家、帮会、青楼、朝廷' },
   { id: 'artifacts', label: '法宝', icon: 'gem', desc: '媚药、情趣法宝、避孕丹药、束缚法器' },
 ]
-
-const mockData: Record<Tab, WorldItem[]> = {
-  locations: [],
-  systems: [],
-  factions: [],
-  artifacts: [],
-}
 
 const typeLabels: Record<Tab, Record<string, string>> = {
   locations: { city: '城市', fortress: '堡垒/洞府', wilderness: '荒野/秘境', brothel: '青楼/妓院', 'hot-spring': '温泉/浴场', bedchamber: '寝宫/闺房', dungeon: '地牢/调教室', other: '其他' },
@@ -38,30 +30,37 @@ const typeOptions: Record<Tab, string[]> = {
 
 export function WorldPage() {
   const { id } = useParams<{ id: string }>()
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<Tab>('locations')
-  const [items, setItems] = useState<Record<Tab, WorldItem[]>>(mockData)
   const [showAdd, setShowAdd] = useState(false)
   const [newItem, setNewItem] = useState({ name: '', type: 'other', description: '' })
 
-  const currentItems = items[activeTab]
+  const { data: items = [] } = useQuery({ queryKey: ['world-items', id], queryFn: () => fetchWorldItems(id!), enabled: !!id })
+  const currentItems = items.filter(item => item.category === activeTab)
   const tab = tabs.find(t => t.id === activeTab)!
 
-  const handleAdd = () => {
+  const addMutation = useMutation({
+    mutationFn: (item: Omit<WorldItem, 'id' | 'status'>) => createWorldItem(id!, item),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['world-items', id] }),
+    onError: error => alert('添加失败: ' + getApiErrorMessage(error)),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (itemId: string) => deleteWorldItem(id!, itemId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['world-items', id] }),
+    onError: error => alert('删除失败: ' + getApiErrorMessage(error)),
+  })
+
+  const handleAdd = async () => {
     if (!newItem.name.trim()) return
-    const item: WorldItem = {
-      id: Date.now().toString(),
-      name: newItem.name,
-      type: newItem.type,
-      description: newItem.description,
-      status: 'active',
-    }
-    setItems(prev => ({ ...prev, [activeTab]: [...prev[activeTab], item] }))
-    setNewItem({ name: '', type: 'other', description: '' })
-    setShowAdd(false)
+    try {
+      await addMutation.mutateAsync({ category: activeTab, ...newItem })
+      setNewItem({ name: '', type: 'other', description: '' })
+      setShowAdd(false)
+    } catch { /* onError displays the API message */ }
   }
 
   const handleDelete = (itemId: string) => {
-    setItems(prev => ({ ...prev, [activeTab]: prev[activeTab].filter(i => i.id !== itemId) }))
+    deleteMutation.mutate(itemId)
   }
 
   return (

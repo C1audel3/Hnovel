@@ -1,6 +1,8 @@
+import type { ReactElement } from 'react'
+
 // Simple SVG icon set - no emoji, clean line-art style
 export function Icon({ name, className = 'w-5 h-5' }: { name: string; className?: string }) {
-  const icons: Record<string, JSX.Element> = {
+  const icons: Record<string, ReactElement> = {
     home: (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/>

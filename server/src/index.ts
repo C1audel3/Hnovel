@@ -5,7 +5,9 @@ import { storyRouter } from './routes/stories.js'
 import { chapterRouter } from './routes/chapters.js'
 import { characterRouter } from './routes/characters.js'
 import { exportRouter } from './routes/export.js'
+import { planningRouter } from './routes/planning.js'
 import { initDatabase } from './db/index.js'
+import { errorHandler, notFoundHandler } from './middleware/errors.js'
 
 dotenv.config()
 
@@ -26,11 +28,15 @@ app.use('/api/stories', storyRouter)
 app.use('/api/stories', chapterRouter)
 app.use('/api/stories', characterRouter)
 app.use('/api/stories', exportRouter)
+app.use('/api/stories', planningRouter)
 
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '0.1.0' })
 })
+
+app.use(notFoundHandler)
+app.use(errorHandler)
 
 // Initialize database and start server
 initDatabase()

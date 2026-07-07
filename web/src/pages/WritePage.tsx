@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { fetchStory, generateOutline, generateChapter, fetchChapters } from '../lib/api'
+import { fetchStory, generateOutline, generateChapter, fetchChapters, fetchOutline, getApiErrorMessage, saveOutline } from '../lib/api'
 import { Icon } from '../components/Icon'
 import { useWriteStore } from '../stores/writeStore'
 import type { OutlineChapter } from '../lib/types'
@@ -10,6 +10,7 @@ export function WritePage() {
   const { id } = useParams<{ id: string }>()
   const { data: story } = useQuery({ queryKey: ['story', id], queryFn: () => fetchStory(id!), enabled: !!id })
   const { data: existingChapters } = useQuery({ queryKey: ['chapters', id], queryFn: () => fetchChapters(id!), enabled: !!id })
+  const { data: savedOutline } = useQuery({ queryKey: ['outline', id], queryFn: () => fetchOutline(id!), enabled: !!id })
   const isNsfw = story?.rating === 'nsfw'
   const existingCount = existingChapters?.length || 0
   const nextChapterNum = existingCount + 1
@@ -17,7 +18,7 @@ export function WritePage() {
   const {
     phase, setPhase, outlineChapters, setOutlineChapters,
     generatedChapters, addGeneratedChapter, generatedChapter,
-    setGeneratedChapter, setConfig, updateChapter, deleteChapter, addChapter, reset,
+    setGeneratedChapter, setConfig, updateChapter, deleteChapter, reset,
     chapterCount, minWords, maxWords,
     focusCharacters, chapterPrompts, setChapterPrompt,
   } = useWriteStore()
@@ -26,6 +27,18 @@ export function WritePage() {
   const [writingIndex, setWritingIndex] = useState(-1)
   const [editingChapter, setEditingChapter] = useState(-1)
   const [editForm, setEditForm] = useState({ title: '', summary: '' })
+
+  useEffect(() => {
+    if (!savedOutline) return
+    setOutlineChapters(savedOutline)
+    for (const chapter of existingChapters || []) addGeneratedChapter(chapter.chapter_number)
+    setPhase(savedOutline.length > 0 ? 'outline' : 'idle')
+  }, [savedOutline, existingChapters, setOutlineChapters, addGeneratedChapter, setPhase])
+
+  const persistOutline = (chapters: OutlineChapter[]) => saveOutline(id!, chapters)
+  const saveOutlineChanges = (chapters: OutlineChapter[]) => {
+    void persistOutline(chapters).catch(error => alert('保存大纲失败: ' + getApiErrorMessage(error)))
+  }
 
   const handleGenerateOutline = async () => {
     setGenerating(true); setOutlineChapters([])
@@ -41,7 +54,12 @@ export function WritePage() {
       })
       setOutlineChapters(result.chapters)
       setPhase('outline')
-    } catch (err: any) { alert('大纲生成失败: ' + (err.response?.data?.error || err.message)) }
+      try {
+        await persistOutline(result.chapters)
+      } catch (error) {
+        alert('大纲已生成，但保存失败: ' + getApiErrorMessage(error))
+      }
+    } catch (error) { alert('AI大纲生成失败: ' + getApiErrorMessage(error)) }
     finally { setGenerating(false) }
   }
 
@@ -58,13 +76,17 @@ export function WritePage() {
       })
       setGeneratedChapter(result)
       addGeneratedChapter(chap.number)
-    } catch (err: any) { alert('章节生成失败: ' + (err.response?.data?.error || err.message)) }
+    } catch (error) { alert('章节生成失败: ' + getApiErrorMessage(error)) }
     finally { setGenerating(false) }
   }
 
   const toggleNsfw = (chapNum: number) => {
     const chap = outlineChapters.find(c => c.number === chapNum)
-    if (chap) updateChapter(chapNum, { nsfw: !chap.nsfw })
+    if (chap) {
+      const next = outlineChapters.map(c => c.number === chapNum ? { ...c, nsfw: !c.nsfw } : c)
+      updateChapter(chapNum, { nsfw: !chap.nsfw })
+      saveOutlineChanges(next)
+    }
   }
 
   const startEdit = (chap: OutlineChapter) => {
@@ -73,8 +95,33 @@ export function WritePage() {
   }
 
   const saveEdit = (chapNum: number) => {
-    updateChapter(chapNum, { title: editForm.title, summary: editForm.summary })
+    const updates = { title: editForm.title, summary: editForm.summary }
+    updateChapter(chapNum, updates)
+    saveOutlineChanges(outlineChapters.map(c => c.number === chapNum ? { ...c, ...updates } : c))
     setEditingChapter(-1)
+  }
+
+  const removeOutlineChapter = (chapNum: number) => {
+    const next = outlineChapters.filter(c => c.number !== chapNum)
+    deleteChapter(chapNum)
+    saveOutlineChanges(next)
+  }
+
+  const appendOutlineChapter = () => {
+    const maxNum = outlineChapters.length > 0 ? Math.max(...outlineChapters.map(c => c.number)) : existingCount
+    const next = [...outlineChapters, { number: maxNum + 1, title: '新章节', summary: '在此编辑章节概要...', nsfw: isNsfw, estimatedWords: 3000 }]
+    setOutlineChapters(next)
+    saveOutlineChanges(next)
+  }
+
+  const clearOutline = async () => {
+    try {
+      await persistOutline([])
+      reset()
+      setPhase('idle')
+    } catch (error) {
+      alert('清除大纲失败: ' + getApiErrorMessage(error))
+    }
   }
 
   return (
@@ -182,11 +229,11 @@ export function WritePage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={() => addChapter(isNsfw)}
+              <button type="button" onClick={appendOutlineChapter}
                 className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
                 <Icon name="plus" className="w-4 h-4 inline mr-1" />添加章节
               </button>
-              <button type="button" onClick={() => { reset(); setPhase('idle') }}
+              <button type="button" onClick={() => void clearOutline()}
                 className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
                 <Icon name="refresh" className="w-4 h-4 inline mr-1" />重新生成
               </button>
@@ -258,7 +305,7 @@ export function WritePage() {
                           <button type="button" onClick={() => startEdit(chap)} className="text-text-muted hover:text-primary p-0.5">
                             <Icon name="edit" className="w-3.5 h-3.5" />
                           </button>
-                          <button type="button" onClick={() => deleteChapter(chap.number)} className="text-text-muted hover:text-danger p-0.5">
+                          <button type="button" onClick={() => removeOutlineChapter(chap.number)} className="text-text-muted hover:text-danger p-0.5">
                             <Icon name="x" className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -279,7 +326,7 @@ export function WritePage() {
                   )}
                 </div>
               ))}
-              <button type="button" onClick={() => addChapter(isNsfw)}
+              <button type="button" onClick={appendOutlineChapter}
                 className="w-full py-2.5 border border-dashed border-border hover:border-primary/30 text-text-muted hover:text-primary rounded-xl text-sm transition-all">
                 <Icon name="plus" className="w-4 h-4 inline mr-1" />添加章节
               </button>

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Icon } from '../components/Icon'
+import { createStoryArc, createTimelineEvent, deleteStoryArc, fetchPlot, getApiErrorMessage, savePlotStructure } from '../lib/api'
+import type { StoryArc as Arc, TimelineEvent } from '../lib/types'
 
-interface Arc { id: string; name: string; type: string; characters: string; description: string; status: string; }
-interface TimelineEvent { id: string; chapter: string; description: string; arc: string; }
 
 const structureModels = [
   { id: 'qichengzhuanhe', name: '起承转合', desc: '铺垫→发展→转折→收束，经典中式四段', phases: ['起 - 铺垫引入', '承 - 发展推进', '转 - 转折高潮', '合 - 收束余韵'] },
@@ -21,6 +22,7 @@ const arcTypes = [
 
 export function PlotPage() {
   const { id } = useParams<{ id: string }>()
+  const { data: plot } = useQuery({ queryKey: ['plot', id], queryFn: () => fetchPlot(id!), enabled: !!id })
   const [selectedStructure, setSelectedStructure] = useState('qichengzhuanhe')
   const [arcs, setArcs] = useState<Arc[]>([])
   const [events, setEvents] = useState<TimelineEvent[]>([])
@@ -29,25 +31,41 @@ export function PlotPage() {
   const [newArc, setNewArc] = useState({ name: '', type: 'main', characters: '', description: '' })
   const [newEvent, setNewEvent] = useState({ chapter: '', description: '', arc: '' })
 
+  useEffect(() => {
+    if (!plot) return
+    setSelectedStructure(plot.structureModel)
+    setArcs(plot.arcs)
+    setEvents(plot.events)
+  }, [plot])
+
   const currentStructure = structureModels.find(s => s.id === selectedStructure)!
 
-  const handleAddArc = () => {
+  const handleAddArc = async () => {
     if (!newArc.name.trim()) return
-    setArcs(prev => [...prev, { id: Date.now().toString(), ...newArc, status: 'active' }])
-    setNewArc({ name: '', type: 'main', characters: '', description: '' })
-    setShowAddArc(false)
+    try {
+      const arc = await createStoryArc(id!, newArc)
+      setArcs(prev => [...prev, arc])
+      setNewArc({ name: '', type: 'main', characters: '', description: '' })
+      setShowAddArc(false)
+    } catch (error) { alert('添加故事线失败: ' + getApiErrorMessage(error)) }
   }
 
-  const handleAddEvent = () => {
+  const handleAddEvent = async () => {
     if (!newEvent.description.trim()) return
-    setEvents(prev => [...prev, { id: Date.now().toString(), ...newEvent }])
-    setNewEvent({ chapter: '', description: '', arc: '' })
-    setShowAddEvent(false)
+    try {
+      const event = await createTimelineEvent(id!, newEvent)
+      setEvents(prev => [...prev, event])
+      setNewEvent({ chapter: '', description: '', arc: '' })
+      setShowAddEvent(false)
+    } catch (error) { alert('添加时间线事件失败: ' + getApiErrorMessage(error)) }
   }
 
-  const handleDeleteArc = (arcId: string) => {
-    setArcs(prev => prev.filter(a => a.id !== arcId))
-    setEvents(prev => prev.filter(e => e.arc !== arcId))
+  const handleDeleteArc = async (arcId: string) => {
+    try {
+      await deleteStoryArc(id!, arcId)
+      setArcs(prev => prev.filter(a => a.id !== arcId))
+      setEvents(prev => prev.filter(e => e.arc !== arcId))
+    } catch (error) { alert('删除故事线失败: ' + getApiErrorMessage(error)) }
   }
 
   return (
@@ -69,7 +87,10 @@ export function PlotPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {structureModels.map(m => (
             <button type="button" key={m.id}
-              onClick={() => setSelectedStructure(m.id)}
+              onClick={() => {
+                setSelectedStructure(m.id)
+                void savePlotStructure(id!, m.id).catch(error => alert('保存故事结构失败: ' + getApiErrorMessage(error)))
+              }}
               className={`text-left p-4 rounded-xl border transition-all ${
                 selectedStructure === m.id
                   ? 'bg-primary text-white border-primary shadow-md'

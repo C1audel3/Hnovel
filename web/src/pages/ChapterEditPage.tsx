@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchChapter, saveChapter, generateChapter, fetchStory } from '../lib/api'
+import { fetchChapter, saveChapter, generateChapter } from '../lib/api'
 import { Icon } from '../components/Icon'
 
 export function ChapterEditPage() {
@@ -12,12 +12,6 @@ export function ChapterEditPage() {
     queryFn: () => fetchChapter(id!, Number(num)),
     enabled: !!id && !!num,
   })
-  const { data: story } = useQuery({
-    queryKey: ['story', id],
-    queryFn: () => fetchStory(id!),
-    enabled: !!id,
-  })
-
   const [content, setContent] = useState('')
   const [saved, setSaved] = useState(false)
 
