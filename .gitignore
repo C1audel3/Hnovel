@@ -1,13 +1,43 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
-.env
-.env.local
-*.db
-*.sqlite
-coverage/
-.turbo/
 web/dist/
 server/dist/
+*.tsbuildinfo
+
+# Local environment
+.env
+.env.*
+!.env.example
+!server/.env.example
+!web/.env.example
+
+# Runtime data
 story-output/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test / cache
+coverage/
+.turbo/
+.vite/
+.cache/
+
+# Local assistant / IDE state
+.claude/
+.codex/
+
+# OS files
 .DS_Store
 Thumbs.db

@@ -1,133 +1,183 @@
-# Hnovel ✦
+# Hnovel
 
-小说 AI 写作平台 — 基于大语言模型的智能网文创作工具。
+Hnovel 是一个面向长篇小说创作的本地 AI 写作工作台。它把故事设定、角色档案、世界观、情节线、大纲和章节正文放在同一个项目空间里，帮助作者更稳定地推进长篇作品。
 
-## 功能
+它适合用来做：
 
-- **AI 大纲生成** — 输入基本设定，自动生成多章大纲，支持 NSFW 章节标记
-- **AI 逐章写作** — 基于大纲逐章生成正文，支持描写尺度调节和逐章微调重写
-- **AI 角色生成** — 自动生成详细角色档案（性格、外貌、背景、偏好），可手动修改
-- **故事管理** — 故事圣经、角色管理、世界观、情节管理四大模块
-- **参考文风** — 粘贴喜欢的文字样本，AI 自动模仿其语调、用词和节奏
-- **AI重写** — 不满意的部分直接AI重写
-- **多格式导出** — 支持 Markdown、TXT、HTML 格式导出
-- **4 种故事类型** — 校园、武侠、异世界、西幻，每种有预设模板
+- 长篇小说项目管理
+- 故事圣经维护
+- 角色与关系梳理
+- 世界观资料整理
+- 分卷 / 分批大纲规划
+- 逐章正文生成与编辑
+- 参考文风与风格档案管理
+
+## 功能概览
+
+- 故事管理：创建多个故事项目，维护标题、类型、简介、视角、时态和整体基调。
+- 故事圣经：集中管理作品核心设定、参考文风和可人工编辑的风格档案。
+- 角色管理：记录角色身份、性格、外貌、背景、标签和说话风格。
+- 世界观管理：保存地点、组织、规则、物品、事件等世界观条目。
+- 情节管理：维护主线、阶段目标、时间线和关键事件。
+- 大纲生成：按章节数、本批目标、焦点角色和逐章提示生成多章大纲。
+- 章节写作：根据当前章节大纲，并参考前后章节大纲与最近正文生成章节草稿。
+- 章节列表：查看、编辑、删除章节。
+- 本地保存：使用 SQLite 保存创作数据，适合个人本地工作流。
+- OpenAI 兼容接口：可接入支持 OpenAI Chat Completions 协议的模型服务。
 
 ## 快速开始
 
+### 1. 安装依赖
+
+在项目根目录执行：
+
 ```bash
-# 1. 安装依赖
-cd web && npm install
-cd ../server && npm install
-
-# 2. 配置 API Key
-cp server/.env.example server/.env
-# 编辑 server/.env，填入你的 LLM API Key
-
-# 3. 启动后端 (端口 4000)
-cd server && npm run dev
-
-# 4. 启动前端 (端口 3000)
-cd web && npm run dev
+npm install
+cd server && npm install
+cd ../web && npm install
 ```
 
-打开浏览器访问 **http://localhost:3000**
+### 2. 配置模型接口
 
-## 技术栈
+复制后端环境变量示例：
 
-| 层 | 技术 |
-|---|------|
-| 前端 | React 19 + TypeScript + Vite + Tailwind CSS 4 |
-| 状态管理 | Zustand + TanStack React Query |
-| 图标 | 内联 SVG 组件 |
-| 后端 | Express 5 + TypeScript |
-| 数据库 | SQLite (better-sqlite3) |
-| AI 接口 | OpenAI 兼容 API (DeepSeek / Claude 等) |
+```bash
+copy server\.env.example server\.env
+```
+
+然后编辑 `server/.env`：
+
+```env
+LLM_API_KEY=your-api-key-here
+LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
+LLM_MODEL=your-model-name
+PORT=4000
+DATA_DIR=../story-output
+```
+
+### 3. 一键启动
+
+Windows 用户可以直接双击：
+
+```text
+start-dev.cmd
+```
+
+也可以在根目录执行：
+
+```bash
+npm run app
+```
+
+启动后访问：
+
+```text
+http://localhost:3000
+```
+
+后端默认运行在：
+
+```text
+http://localhost:4000
+```
+
+## 常用命令
+
+```bash
+npm run app          # 一键启动前端和后端开发服务
+npm run dev          # 同 app，启动开发环境
+npm run dev:web      # 只启动前端
+npm run dev:server   # 只启动后端
+npm run build        # 构建前端和后端
+npm run start        # 构建后启动后端生产服务
+```
+
+## 推荐创作流程
+
+1. 创建故事项目，填写简介、类型、视角和基调。
+2. 在故事圣经中补充核心设定、参考文风和风格档案。
+3. 添加主要角色，整理角色动机、关系和说话方式。
+4. 在世界观与情节管理中记录重要地点、组织、规则、主线和时间线。
+5. 进入写作页，填写本批章节目标和逐章提示。
+6. 生成大纲，人工调整章节标题和摘要。
+7. 按章节生成正文，检查连续性后继续编辑。
+8. 在章节列表中统一管理已写章节。
 
 ## 项目结构
 
-```
+```text
 Hnovel/
-├── web/                # 前端 React 应用
-│   └── src/
-│       ├── components/ # Icon、Layout 等通用组件
-│       ├── pages/      # 路由页面
-│       ├── stores/     # Zustand 全局状态
-│       └── lib/        # API 客户端、类型定义
-├── server/             # 后端 Express API
-│   └── src/
-│       ├── routes/     # stories、chapters、characters、export
-│       ├── agents/     # AI 生成调度 (大纲/章节/角色)
-│       └── db/         # SQLite 数据库初始化
-├── skills/             # NSFW Agent Skill 定义
-│   ├── nsfw-story-init/       # 故事初始化
-│   ├── nsfw-character/        # 角色管理
-│   ├── nsfw-worldbuilding/    # 世界观构建
-│   ├── nsfw-scene-writing/    # 情欲场景写作指南
-│   └── nsfw-continuity/       # 连续性追踪
-├── templates/          # 故事类型预设模板
-│   ├── school/         # 校园
-│   ├── wuxia/          # 武侠
-│   ├── isekai/         # 异世界
-│   └── western/        # 西幻
-└── story-output/       # 生成的故事数据 (SQLite + Markdown)
+├─ web/                # React 前端应用
+│  └─ src/
+│     ├─ components/   # 通用组件
+│     ├─ pages/        # 页面
+│     ├─ stores/       # 前端状态
+│     └─ lib/          # API 客户端与类型
+├─ server/             # Express 后端 API
+│  └─ src/
+│     ├─ agents/       # AI 生成调度
+│     ├─ db/           # SQLite 初始化与迁移
+│     ├─ middleware/   # 校验与错误处理
+│     └─ routes/       # API 路由
+├─ story-output/       # 默认数据输出目录
+├─ templates/          # 故事模板
+├─ skills/             # 内部创作辅助资料
+├─ start-dev.cmd       # Windows 一键启动脚本
+└─ package.json        # 根项目命令
 ```
 
-## API 端点
+## 技术栈
 
-### 故事
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/stories` | 故事列表 |
-| POST | `/api/stories` | 创建故事 |
-| GET | `/api/stories/:id` | 故事详情 |
-| PUT | `/api/stories/:id` | 更新故事 |
-| DELETE | `/api/stories/:id` | 删除故事 |
-
-### 角色
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/stories/:id/characters` | 角色列表 |
-| POST | `/api/stories/:id/characters` | 添加角色 |
-| POST | `/api/stories/:id/characters/generate` | AI 生成角色 |
-| GET | `/api/stories/:id/characters/:cid` | 角色详情 |
-| GET | `/api/stories/:id/relationship-graph` | 关系图谱 |
-
-### 章节 & AI
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/stories/:id/chapters` | 章节列表 |
-| POST | `/api/stories/:id/chapters/generate-outline` | AI 生成大纲 |
-| POST | `/api/stories/:id/chapters/generate` | AI 生成章节 |
-| PUT | `/api/stories/:id/chapters/:num` | 保存章节 |
-
-### 导出
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/stories/:id/export/markdown` | 导出 Markdown |
-| GET | `/api/stories/:id/export/txt` | 导出 TXT |
-| GET | `/api/stories/:id/export/html` | 导出 HTML |
+| 模块 | 技术 |
+| --- | --- |
+| 前端 | React + TypeScript + Vite |
+| 状态管理 | Zustand + TanStack React Query |
+| 后端 | Express + TypeScript |
+| 数据库 | SQLite / better-sqlite3 |
+| AI 接口 | OpenAI-compatible Chat Completions API |
 
 ## 环境变量
 
-```bash
-# server/.env
-LLM_API_KEY=your-api-key          # LLM API 密钥
-LLM_BASE_URL=https://example.com  # API 地址 (OpenAI 兼容)
-LLM_MODEL=deepseek-v4-flash       # 模型名称
-PORT=4000                         # 后端端口
-DATA_DIR=../story-output          # 数据存储目录
+后端读取 `server/.env`：
+
+```env
+LLM_API_KEY=your-api-key-here
+LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
+LLM_MODEL=your-model-name
+PORT=4000
+DATA_DIR=../story-output
 ```
 
-## 写作流程
+说明：
 
-1. **创建故事** → 选择类型、分级、描写尺度
-2. **AI 生成角色** → 输入姓名和提示词，AI 生成完整档案
-3. **生成大纲** → 设置章节数量，AI 生成多章大纲；手动标记 NSFW 章节
-4. **编辑大纲** → 修改标题、概要；添加/删除章节
-5. **逐章生成** → 点击单章生成正文，右侧实时预览
-6. **手动编辑** → 在编辑器中修改章节内容
-7. **导出** → 导出为 Markdown / TXT / HTML
+- `LLM_API_KEY`：模型服务密钥。
+- `LLM_BASE_URL`：OpenAI 兼容接口地址。
+- `LLM_MODEL`：模型名称。
+- `PORT`：后端端口，默认 `4000`。
+- `DATA_DIR`：SQLite 数据与输出文件目录。
+
+## 常见问题
+
+### 前端提示 AI 生成失败
+
+先检查：
+
+- `server/.env` 是否存在。
+- `LLM_API_KEY` 是否填写。
+- `LLM_BASE_URL` 是否是可用的 OpenAI 兼容地址。
+- 修改后端代码或 `.env` 后是否已经重启后端。
+
+### 提示 404
+
+通常是模型接口地址或后端路由不匹配。优先检查 `LLM_BASE_URL`，确认它指向模型服务的 Chat Completions 兼容入口。
+
+### 修改代码后没有生效
+
+后端代码和 `.env` 修改后需要重启后端服务。使用 `start-dev.cmd` 时，关闭窗口后重新启动即可。
+
+### 数据保存在哪里
+
+默认保存在 `story-output/`，可通过 `server/.env` 里的 `DATA_DIR` 修改。
 
 ## License
 
