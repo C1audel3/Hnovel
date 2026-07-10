@@ -2,9 +2,24 @@ import { Router, Request, Response } from 'express'
 import { getDatabase } from '../db/index.js'
 import { randomUUID } from 'crypto'
 import fs from 'fs'
+import path from 'path'
 import { storyCreateSchema, storyUpdateSchema, validateBody } from '../middleware/validation.js'
 
 export const storyRouter = Router()
+
+function getDataDir(): string {
+  return path.resolve(process.env.DATA_DIR || path.join(process.cwd(), '..', 'story-output'))
+}
+
+function getSafeStoryDir(storyId: string): string {
+  const dataDir = getDataDir()
+  const storyDir = path.resolve(dataDir, storyId)
+  const relative = path.relative(dataDir, storyDir)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Invalid story directory')
+  }
+  return storyDir
+}
 
 // List all stories
 storyRouter.get('/', (_req: Request, res: Response) => {
@@ -57,11 +72,11 @@ storyRouter.post('/', validateBody(storyCreateSchema), (req: Request, res: Respo
     JSON.stringify(themes || []))
 
   // Also create the story directory on disk
-  const storyDir = `${process.env.DATA_DIR || '../story-output'}/${id}`
+  const storyDir = getSafeStoryDir(id)
   if (!fs.existsSync(storyDir)) {
     fs.mkdirSync(storyDir, { recursive: true })
-    fs.mkdirSync(`${storyDir}/chapters`, { recursive: true })
-    fs.mkdirSync(`${storyDir}/characters`, { recursive: true })
+    fs.mkdirSync(path.join(storyDir, 'chapters'), { recursive: true })
+    fs.mkdirSync(path.join(storyDir, 'characters'), { recursive: true })
   }
 
   const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(id)
@@ -110,12 +125,32 @@ storyRouter.put('/:id', validateBody(storyUpdateSchema), (req: Request, res: Res
 // Delete story
 storyRouter.delete('/:id', (req: Request, res: Response) => {
   const db = getDatabase()
-  const existing = db.prepare('SELECT * FROM stories WHERE id = ?').get(String(req.params.id))
+  const id = String(req.params.id)
+  const existing = db.prepare('SELECT * FROM stories WHERE id = ?').get(id)
   if (!existing) {
     return res.status(404).json({ error: 'Story not found' })
   }
-  db.prepare('DELETE FROM stories WHERE id = ?').run(String(req.params.id))
-  res.json({ deleted: true })
+
+  let storyDir: string
+  try {
+    storyDir = getSafeStoryDir(id)
+    if (fs.existsSync(storyDir) && !fs.statSync(storyDir).isDirectory()) {
+      return res.status(500).json({ error: 'Story output path is not a directory', code: 'INVALID_STORY_DIR' })
+    }
+  } catch {
+    return res.status(400).json({ error: 'Invalid story id', code: 'INVALID_STORY_ID' })
+  }
+
+  try {
+    const remove = db.transaction(() => {
+      db.prepare('DELETE FROM stories WHERE id = ?').run(id)
+      if (fs.existsSync(storyDir)) fs.rmSync(storyDir, { recursive: true, force: true })
+    })
+    remove()
+    res.json({ deleted: true, outputDeleted: !fs.existsSync(storyDir) })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || '删除故事输出目录失败', code: 'DELETE_STORY_FAILED' })
+  }
 })
 
 storyRouter.post('/:id/analyze-style', async (req: Request, res: Response) => {

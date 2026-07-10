@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Story, Chapter, GenerateOptions, GeneratedChapter, GeneratedOutline, OutlineChapter, PlotData, StoryArc, TimelineEvent, WorldItem } from './types'
+import type { Story, Chapter, Foreshadow, GenerateOptions, GeneratedChapter, GeneratedOutline, OutlineChapter, PlotData, StoryArc, TimelineEvent, WorldItem } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -79,11 +79,17 @@ export async function generateChapter(storyId: string, options: GenerateOptions)
 export async function fetchWorldItems(storyId: string): Promise<WorldItem[]> {
   return (await api.get(`/stories/${storyId}/world-items`)).data
 }
-export async function createWorldItem(storyId: string, item: Omit<WorldItem, 'id' | 'status'>): Promise<WorldItem> {
+export async function createWorldItem(storyId: string, item: Omit<WorldItem, 'id'>): Promise<WorldItem> {
   return (await api.post(`/stories/${storyId}/world-items`, item)).data
+}
+export async function updateWorldItem(storyId: string, itemId: string, item: Omit<WorldItem, 'id'>): Promise<WorldItem> {
+  return (await api.put(`/stories/${storyId}/world-items/${itemId}`, item)).data
 }
 export async function deleteWorldItem(storyId: string, itemId: string): Promise<void> {
   await api.delete(`/stories/${storyId}/world-items/${itemId}`)
+}
+export async function generateWorldItemDraft(storyId: string, input: { category: string; name?: string; hints?: string }): Promise<Partial<WorldItem> & { tags?: string }> {
+  return (await api.post(`/stories/${storyId}/world-items/generate`, input)).data
 }
 export async function fetchPlot(storyId: string): Promise<PlotData> {
   return (await api.get(`/stories/${storyId}/plot`)).data
@@ -102,6 +108,15 @@ export async function createTimelineEvent(storyId: string, event: Omit<TimelineE
 }
 export async function deleteTimelineEvent(storyId: string, eventId: string): Promise<void> {
   await api.delete(`/stories/${storyId}/plot/events/${eventId}`)
+}
+export async function createForeshadow(storyId: string, item: Omit<Foreshadow, 'id'>): Promise<Foreshadow> {
+  return (await api.post(`/stories/${storyId}/plot/foreshadows`, item)).data
+}
+export async function deleteForeshadow(storyId: string, foreshadowId: string): Promise<void> {
+  await api.delete(`/stories/${storyId}/plot/foreshadows/${foreshadowId}`)
+}
+export async function generatePlotDraft(storyId: string, input: { kind: 'arc' | 'event' | 'foreshadow'; startChapter?: string; endChapter?: string; hints?: string }): Promise<any> {
+  return (await api.post(`/stories/${storyId}/plot/generate`, input)).data
 }
 export async function fetchOutline(storyId: string): Promise<OutlineChapter[]> {
   return (await api.get(`/stories/${storyId}/outline`)).data

@@ -40,10 +40,10 @@ export function StoryPage() {
           <div>
             <h1 className="text-2xl font-bold text-text-primary">{story.title}</h1>
             <div className="flex items-center gap-2 mt-2">
-              {story.rating === 'nsfw' && <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary-bg text-primary font-medium">NSFW</span>}
+              {story.rating === 'nsfw' && <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary-bg text-primary font-medium">成人向</span>}
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-bg-dark text-text-secondary">{genreLabels[story.genre] || story.genre}</span>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-bg-dark text-text-secondary">
-                {story.explicit_level === 'mild' ? '轻度描写' : story.explicit_level === 'moderate' ? '中度描写' : '详细描写'}
+                {story.explicit_level === 'mild' ? '简洁' : story.explicit_level === 'moderate' ? '适中' : '详细'}
               </span>
             </div>
           </div>
@@ -105,7 +105,7 @@ export function StoryPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-mono text-text-muted bg-bg-card px-2.5 py-1 rounded-lg border border-border">Ch.{ch.chapter_number}</span>
                   <span className="text-sm font-medium">{ch.title}</span>
-                  {ch.scene_type !== 'normal' && <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary-bg text-primary">NSFW</span>}
+                  {ch.scene_type !== 'normal' && <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary-bg text-primary">重点场景</span>}
                 </div>
                 <div className="flex items-center gap-3 text-xs text-text-muted">
                   <span>{ch.word_count.toLocaleString()} 字</span>

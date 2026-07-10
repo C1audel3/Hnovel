@@ -13,16 +13,23 @@ export function WritePage() {
   const { data: savedOutline } = useQuery({ queryKey: ['outline', id], queryFn: () => fetchOutline(id!), enabled: !!id })
   const isNsfw = story?.rating === 'nsfw'
   const existingCount = existingChapters?.length || 0
-  const nextChapterNum = existingCount + 1
 
   const {
     switchStory,
     phase, setPhase, outlineChapters, setOutlineChapters,
     generatedChapters, addGeneratedChapter, generatedChapter,
-    setGeneratedChapter, setConfig, updateChapter, deleteChapter, reset,
+    setGeneratedChapter, setConfig, updateChapter, deleteChapter,
     chapterCount, minWords, maxWords,
     focusCharacters, outlineDirection, chapterPrompts, setChapterPrompt,
   } = useWriteStore()
+
+  const occupiedChapterNumbers = new Set<number>()
+  for (const chapter of existingChapters || []) occupiedChapterNumbers.add(chapter.chapter_number)
+  for (const chapter of outlineChapters) occupiedChapterNumbers.add(chapter.number)
+  let nextChapterNum = 1
+  while (occupiedChapterNumbers.has(nextChapterNum)) nextChapterNum++
+  const maxWrittenChapter = existingChapters?.reduce((max, chapter) => Math.max(max, chapter.chapter_number || 0), 0) || 0
+  const maxSavedOutlineChapter = outlineChapters.reduce((max, chapter) => Math.max(max, chapter.number || 0), 0)
 
   const [generating, setGenerating] = useState(false)
   const [writingIndex, setWritingIndex] = useState(-1)
@@ -42,19 +49,37 @@ export function WritePage() {
     setOutlineChapters(savedOutline)
     for (const chapter of existingChapters || []) addGeneratedChapter(chapter.chapter_number)
     setPhase(savedOutline.length > 0 ? 'outline' : 'idle')
-  }, [savedOutline, existingChapters, setOutlineChapters, addGeneratedChapter, setPhase])
+  }, [id, savedOutline, existingChapters, setOutlineChapters, addGeneratedChapter, setPhase])
 
-  const persistOutline = (chapters: OutlineChapter[]) => saveOutline(id!, chapters)
+  const normalizeOutlineForSave = (chapters: OutlineChapter[]) => chapters.map(chapter => ({
+    ...chapter,
+    number: Number(chapter.number),
+    title: chapter.title || `第${chapter.number}章`,
+    summary: chapter.summary || '（暂无概要）',
+    nsfw: Boolean(chapter.nsfw),
+    estimatedWords: Number.isFinite(Number(chapter.estimatedWords)) && Number(chapter.estimatedWords) >= 100
+      ? Math.round(Number(chapter.estimatedWords))
+      : 3000,
+  }))
+
+  const persistOutline = (chapters: OutlineChapter[]) => saveOutline(id!, normalizeOutlineForSave(chapters))
   const saveOutlineChanges = (chapters: OutlineChapter[]) => {
     void persistOutline(chapters).catch(error => alert('保存大纲失败: ' + getApiErrorMessage(error)))
   }
 
+  const mergeOutlineChapters = (base: OutlineChapter[], incoming: OutlineChapter[]) => {
+    const merged = new Map<number, OutlineChapter>()
+    for (const chapter of base) merged.set(chapter.number, chapter)
+    for (const chapter of incoming) merged.set(chapter.number, chapter)
+    return normalizeOutlineForSave([...merged.values()]).sort((a, b) => a.number - b.number)
+  }
+
   const handleGenerateOutline = async () => {
     const requestStoryId = id!
-    setGenerating(true); setOutlineChapters([])
+    setGenerating(true)
     try {
       const result = await generateOutline(requestStoryId, {
-        chapterCount, intensityLevel: 10, explicitLevel: 'graphic',
+        chapterCount, chapterNumber: nextChapterNum, intensityLevel: 10, explicitLevel: 'graphic',
         outlineDirection: outlineDirection.trim() || undefined,
         focusCharacters: focusCharacters ? focusCharacters.split(',').map(s => s.trim()).filter(Boolean) : undefined,
         additionalInstructions: (() => {
@@ -63,13 +88,15 @@ export function WritePage() {
           return entries.map(([k, v]) => `第${k}章: ${v}`).join('\n')
         })(),
       })
+      const nextOutline = mergeOutlineChapters(useWriteStore.getState().outlineChapters, result.chapters)
       try {
-        await saveOutline(requestStoryId, result.chapters)
+        await saveOutline(requestStoryId, normalizeOutlineForSave(nextOutline))
       } catch (error) {
         alert('大纲已生成，但保存失败: ' + getApiErrorMessage(error))
+        return
       }
       if (useWriteStore.getState().activeStoryId !== requestStoryId) return
-      setOutlineChapters(result.chapters)
+      setOutlineChapters(nextOutline)
       setPhase('outline')
     } catch (error) {
       if (useWriteStore.getState().activeStoryId === requestStoryId) alert('AI大纲生成失败: ' + getApiErrorMessage(error))
@@ -129,20 +156,46 @@ export function WritePage() {
   }
 
   const appendOutlineChapter = () => {
-    const maxNum = outlineChapters.length > 0 ? Math.max(...outlineChapters.map(c => c.number)) : existingCount
+    const maxNum = Math.max(maxWrittenChapter, maxSavedOutlineChapter)
     const next = [...outlineChapters, { number: maxNum + 1, title: '新章节', summary: '在此编辑章节概要...', nsfw: isNsfw, estimatedWords: 3000 }]
     setOutlineChapters(next)
     saveOutlineChanges(next)
   }
 
   const clearOutline = async () => {
-    try {
-      await persistOutline([])
-      reset()
-      setPhase('idle')
-    } catch (error) {
-      alert('清除大纲失败: ' + getApiErrorMessage(error))
+    setPhase('idle')
+  }
+
+  const clearUnwrittenOutline = () => {
+    const written = new Set((existingChapters || []).map(chapter => chapter.chapter_number))
+    const next = outlineChapters.filter(chapter => written.has(chapter.number))
+    if (!confirm(`确认清空 ${outlineChapters.length - next.length} 条未写大纲？`)) return
+    setOutlineChapters(next)
+    saveOutlineChanges(next)
+  }
+
+  const clearOutlineRange = () => {
+    const input = prompt('输入要清空的大纲范围，例如 6-12 或 8')
+    if (!input) return
+    const trimmed = input.trim()
+    const match = trimmed.match(/^(\d+)(?:\s*[-~]\s*(\d+))?$/)
+    if (!match) {
+      alert('范围格式不正确，请输入例如 6-12 或 8')
+      return
     }
+    const from = Number(match[1])
+    const to = Number(match[2] || match[1])
+    const min = Math.min(from, to)
+    const max = Math.max(from, to)
+    const next = outlineChapters.filter(chapter => chapter.number < min || chapter.number > max)
+    const removed = outlineChapters.length - next.length
+    if (removed === 0) {
+      alert(`没有找到第 ${min}-${max} 章范围内的大纲`)
+      return
+    }
+    if (!confirm(`确认清空第 ${min}-${max} 章范围内的 ${removed} 条大纲？`)) return
+    setOutlineChapters(next)
+    saveOutlineChanges(next)
   }
 
   return (
@@ -156,7 +209,7 @@ export function WritePage() {
       </div>
 
       <h1 className="text-2xl font-bold mb-1">AI写作</h1>
-      <p className="text-text-secondary mb-6">{story?.title}{story ? ' &middot; ' + (story.rating === 'nsfw' ? 'NSFW' : '非NSFW') : ''}</p>
+      <p className="text-text-secondary mb-6">{story?.title}{story ? ' &middot; ' + (story.rating === 'nsfw' ? '成人向' : '一般向') : ''}</p>
 
       {phase === 'idle' && (
         <div className="max-w-xl mx-auto">
@@ -171,6 +224,26 @@ export function WritePage() {
                 : `AI 将生成 ${chapterCount} 章大纲`}
             </p>
 
+            {outlineChapters.length > 0 && (
+              <div className="mb-5 bg-bg-dark border border-border rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-medium text-text-secondary">已有大纲上下文（生成后续章节时会保留并参考）</p>
+                  <span className="text-xs text-text-muted">{outlineChapters.length} 章</span>
+                </div>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {outlineChapters.map(chap => (
+                    <div key={chap.number} className="border border-border/70 rounded-lg p-2 bg-bg-card/60">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-mono text-text-muted">Ch.{chap.number}</span>
+                        <span className="text-xs text-text-secondary truncate">{chap.title}</span>
+                      </div>
+                      <p className="text-xs text-text-muted line-clamp-2">{chap.summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -180,7 +253,7 @@ export function WritePage() {
                     className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-primary mb-1">描写尺度</label>
+                  <label className="block text-xs font-medium text-text-primary mb-1">细节程度</label>
                   <input type="text" value="详细" disabled
                     className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-xl text-sm text-text-muted cursor-not-allowed" />
                 </div>
@@ -256,7 +329,7 @@ export function WritePage() {
               <h2 className="text-lg font-semibold">大纲预览</h2>
               <p className="text-sm text-text-muted">
                 {outlineChapters.length} 章 &middot;
-                {outlineChapters.filter(c => c.nsfw).length} NSFW &middot;
+                {outlineChapters.filter(c => c.nsfw).length} 重点场景 &middot;
                 {generatedChapters.size}/{outlineChapters.length} 已生成 &middot;
                 {outlineChapters.reduce((s, c) => s + c.estimatedWords, 0).toLocaleString()} 字预估
               </p>
@@ -268,7 +341,15 @@ export function WritePage() {
               </button>
               <button type="button" onClick={() => void clearOutline()}
                 className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
-                <Icon name="refresh" className="w-4 h-4 inline mr-1" />重新生成
+                <Icon name="refresh" className="w-4 h-4 inline mr-1" />继续生成
+              </button>
+              <button type="button" onClick={clearOutlineRange}
+                className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
+                清空范围
+              </button>
+              <button type="button" onClick={clearUnwrittenOutline}
+                className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
+                清空未写
               </button>
             </div>
           </div>
@@ -303,7 +384,7 @@ export function WritePage() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono text-text-muted">Ch.{chap.number}</span>
-                        {chap.nsfw && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-bg text-primary">NSFW</span>}
+                        {chap.nsfw && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-bg text-primary">重点</span>}
                       </div>
                       <input type="text" value={editForm.title}
                         onChange={e => setEditForm({ ...editForm, title: e.target.value })}
@@ -323,7 +404,7 @@ export function WritePage() {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono text-text-muted bg-bg-dark px-2 py-0.5 rounded-lg">Ch.{chap.number}</span>
-                          {chap.nsfw && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-bg text-primary font-medium">NSFW</span>}
+                          {chap.nsfw && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-bg text-primary font-medium">重点</span>}
                           {generatedChapters.has(chap.number) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success-bg text-success font-medium">已生成</span>}
                         </div>
                         <div className="flex items-center gap-1">
@@ -332,7 +413,7 @@ export function WritePage() {
                               className={`text-[10px] px-1.5 py-0.5 rounded-lg transition-all ${
                                 chap.nsfw ? 'bg-primary text-white' : 'bg-bg-dark text-text-muted border border-border'
                               }`}>
-                              {chap.nsfw ? 'NSFW' : 'SFW'}
+                              {chap.nsfw ? '重点' : '普通'}
                             </button>
                           )}
                           <button type="button" onClick={() => startEdit(chap)} className="text-text-muted hover:text-primary p-0.5">

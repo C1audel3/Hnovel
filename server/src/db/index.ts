@@ -59,6 +59,14 @@ export function initDatabase(): void {
       sexual_orientation TEXT,
       preferences TEXT DEFAULT '[]',
       body_features TEXT,
+      importance TEXT DEFAULT 'medium',
+      current_goal TEXT DEFAULT '',
+      core_conflict TEXT DEFAULT '',
+      character_arc TEXT DEFAULT '',
+      voice_style TEXT DEFAULT '',
+      relation_to_plot TEXT DEFAULT '',
+      secrets TEXT DEFAULT '',
+      writing_notes TEXT DEFAULT '',
       tags TEXT DEFAULT '[]',
       affection_level INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
@@ -72,6 +80,12 @@ export function initDatabase(): void {
       target_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
       rel_type TEXT NOT NULL DEFAULT 'acquaintance',
       intimacy_level INTEGER DEFAULT 0,
+      trust_level INTEGER DEFAULT 0,
+      conflict_level INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      phase TEXT DEFAULT '',
+      is_public INTEGER DEFAULT 1,
+      notes TEXT DEFAULT '',
       description TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
@@ -110,7 +124,14 @@ export function initDatabase(): void {
       category TEXT NOT NULL,
       name TEXT NOT NULL,
       item_type TEXT NOT NULL DEFAULT 'other',
+      summary TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      rules TEXT DEFAULT '',
+      connections TEXT DEFAULT '',
+      tags TEXT DEFAULT '',
+      importance TEXT DEFAULT 'medium',
+      start_chapter INTEGER,
+      end_chapter INTEGER,
       status TEXT DEFAULT 'active',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
@@ -129,6 +150,12 @@ export function initDatabase(): void {
       arc_type TEXT NOT NULL DEFAULT 'main',
       characters TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      start_chapter INTEGER,
+      end_chapter INTEGER,
+      priority TEXT DEFAULT 'medium',
+      current_phase TEXT DEFAULT '',
+      goal TEXT DEFAULT '',
+      conflict TEXT DEFAULT '',
       status TEXT DEFAULT 'active',
       created_at TEXT DEFAULT (datetime('now'))
     );
@@ -139,7 +166,26 @@ export function initDatabase(): void {
       chapter TEXT DEFAULT '',
       description TEXT NOT NULL,
       arc_id TEXT REFERENCES story_arcs(id) ON DELETE CASCADE,
+      event_type TEXT DEFAULT 'main',
+      importance TEXT DEFAULT 'medium',
+      characters TEXT DEFAULT '',
+      occurred INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS foreshadows (
+      id TEXT PRIMARY KEY,
+      story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      setup_chapter TEXT DEFAULT '',
+      payoff_chapter TEXT DEFAULT '',
+      arc_id TEXT REFERENCES story_arcs(id) ON DELETE SET NULL,
+      status TEXT DEFAULT 'planned',
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS outline_chapters (
@@ -161,10 +207,43 @@ export function initDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_world_items_story ON world_items(story_id);
     CREATE INDEX IF NOT EXISTS idx_story_arcs_story ON story_arcs(story_id);
     CREATE INDEX IF NOT EXISTS idx_timeline_events_story ON timeline_events(story_id);
+    CREATE INDEX IF NOT EXISTS idx_foreshadows_story ON foreshadows(story_id);
     CREATE INDEX IF NOT EXISTS idx_outline_chapters_story ON outline_chapters(story_id);
   `)
 
   // Migration: add reference_style to existing databases
   try { d.exec(`ALTER TABLE stories ADD COLUMN reference_style TEXT DEFAULT ''`) } catch {}
   try { d.exec(`ALTER TABLE stories ADD COLUMN style_profile TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN importance TEXT DEFAULT 'medium'`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN current_goal TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN core_conflict TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN character_arc TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN voice_style TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN relation_to_plot TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN secrets TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE characters ADD COLUMN writing_notes TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE character_relationships ADD COLUMN trust_level INTEGER DEFAULT 0`) } catch {}
+  try { d.exec(`ALTER TABLE character_relationships ADD COLUMN conflict_level INTEGER DEFAULT 0`) } catch {}
+  try { d.exec(`ALTER TABLE character_relationships ADD COLUMN status TEXT DEFAULT 'active'`) } catch {}
+  try { d.exec(`ALTER TABLE character_relationships ADD COLUMN phase TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE character_relationships ADD COLUMN is_public INTEGER DEFAULT 1`) } catch {}
+  try { d.exec(`ALTER TABLE character_relationships ADD COLUMN notes TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE world_items ADD COLUMN summary TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE world_items ADD COLUMN rules TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE world_items ADD COLUMN connections TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE world_items ADD COLUMN tags TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE world_items ADD COLUMN importance TEXT DEFAULT 'medium'`) } catch {}
+  try { d.exec(`ALTER TABLE world_items ADD COLUMN start_chapter INTEGER`) } catch {}
+  try { d.exec(`ALTER TABLE world_items ADD COLUMN end_chapter INTEGER`) } catch {}
+  try { d.exec(`ALTER TABLE story_arcs ADD COLUMN start_chapter INTEGER`) } catch {}
+  try { d.exec(`ALTER TABLE story_arcs ADD COLUMN end_chapter INTEGER`) } catch {}
+  try { d.exec(`ALTER TABLE story_arcs ADD COLUMN priority TEXT DEFAULT 'medium'`) } catch {}
+  try { d.exec(`ALTER TABLE story_arcs ADD COLUMN current_phase TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE story_arcs ADD COLUMN goal TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE story_arcs ADD COLUMN conflict TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE timeline_events ADD COLUMN event_type TEXT DEFAULT 'main'`) } catch {}
+  try { d.exec(`ALTER TABLE timeline_events ADD COLUMN importance TEXT DEFAULT 'medium'`) } catch {}
+  try { d.exec(`ALTER TABLE timeline_events ADD COLUMN characters TEXT DEFAULT ''`) } catch {}
+  try { d.exec(`ALTER TABLE timeline_events ADD COLUMN occurred INTEGER DEFAULT 0`) } catch {}
+  try { d.exec(`ALTER TABLE timeline_events ADD COLUMN notes TEXT DEFAULT ''`) } catch {}
 }

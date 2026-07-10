@@ -10,7 +10,7 @@ export function HomePage() {
   const queryClient = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [newStory, setNewStory] = useState({
-    title: '', genre: 'school', rating: 'nsfw' as Story['rating'],
+    title: '', genre: 'school', rating: 'safe' as Story['rating'],
     explicit_level: 'moderate' as Story['explicit_level'],
     target_audience: 'male' as Story['target_audience'],
     pov: 'third-person-limited', synopsis: '', themes: [] as string[],
@@ -33,7 +33,7 @@ export function HomePage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">我的故事</h1>
-          <p className="text-text-secondary mt-1">管理你的NSFW小说项目</p>
+          <p className="text-text-secondary mt-1">管理你的长篇小说项目</p>
         </div>
         <button type="button" onClick={() => setShowCreate(true)}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl transition-all font-medium text-sm shadow-md shadow-primary/20 btn-press">
@@ -66,17 +66,17 @@ export function HomePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-primary mb-1.5">分级</label>
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">内容分级</label>
                   <select value={newStory.rating} onChange={e => setNewStory({ ...newStory, rating: e.target.value as Story['rating'] })}
                     className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-xl text-text-primary focus:border-primary focus:outline-none">
-                    <option value="nsfw">NSFW</option><option value="safe">非NSFW</option>
+                    <option value="safe">一般向</option><option value="nsfw">成人向</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-primary mb-1.5">描写尺度</label>
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">细节程度</label>
                   <select value={newStory.explicit_level} onChange={e => setNewStory({ ...newStory, explicit_level: e.target.value as Story['explicit_level'] })}
                     className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-xl text-text-primary focus:border-primary focus:outline-none">
-                    <option value="mild">轻度 - 含蓄暗示</option><option value="moderate">中度 - 感官刻画</option><option value="graphic">详细 - 完整描写</option>
+                    <option value="mild">简洁 - 快速推进</option><option value="moderate">适中 - 有重点刻画</option><option value="graphic">详细 - 场景完整</option>
                   </select>
                 </div>
                 <div>
@@ -123,7 +123,7 @@ export function HomePage() {
               className="bg-bg-card border border-border hover:border-primary/30 rounded-2xl p-5 cursor-pointer transition-all shadow-sm hover-lift group card-enter">
               <div className="flex items-start justify-between mb-3">
                 <h3 className="text-lg font-semibold text-text-primary group-hover:text-primary transition-colors line-clamp-1">{story.title}</h3>
-                {story.rating === 'nsfw' && <span className="text-xs px-2 py-0.5 rounded-full bg-primary-bg text-primary font-medium ml-2 flex-shrink-0">NSFW</span>}
+                {story.rating === 'nsfw' && <span className="text-xs px-2 py-0.5 rounded-full bg-primary-bg text-primary font-medium ml-2 flex-shrink-0">成人向</span>}
               </div>
               {story.synopsis && <p className="text-sm text-text-secondary line-clamp-2 mb-3">{story.synopsis}</p>}
               <div className="flex items-center gap-2 text-xs text-text-muted mb-3">

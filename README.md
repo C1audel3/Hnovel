@@ -53,6 +53,7 @@ LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
 LLM_MODEL=your-model-name
 PORT=4000
 DATA_DIR=../story-output
+DEBUG_AI_RESPONSE=false
 ```
 
 ### 3. 一键启动
@@ -89,7 +90,9 @@ npm run dev          # 同 app，启动开发环境
 npm run dev:web      # 只启动前端
 npm run dev:server   # 只启动后端
 npm run build        # 构建前端和后端
-npm run start        # 构建后启动后端生产服务
+npm run start        # 构建后启动生产服务（后端会托管 web/dist）
+npm run lint         # 前端 lint + 后端类型检查
+npm run test         # 完整构建检查
 ```
 
 ## 推荐创作流程
@@ -146,6 +149,7 @@ LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
 LLM_MODEL=your-model-name
 PORT=4000
 DATA_DIR=../story-output
+DEBUG_AI_RESPONSE=false
 ```
 
 说明：
@@ -155,6 +159,18 @@ DATA_DIR=../story-output
 - `LLM_MODEL`：模型名称。
 - `PORT`：后端端口，默认 `4000`。
 - `DATA_DIR`：SQLite 数据与输出文件目录。
+- `DEBUG_AI_RESPONSE`：设为 `true` 时，会把 AI 大纲原始响应保存到 `story-output/debug/`，便于排查格式问题。
+
+## 运行检查
+
+后端提供两个健康检查接口：
+
+```text
+GET /api/health
+GET /api/health/llm
+```
+
+其中 `/api/health/llm` 会用当前 `LLM_API_KEY`、`LLM_BASE_URL` 和 `LLM_MODEL` 发起一次最小模型请求，用于确认模型配置是否可用。
 
 ## 常见问题
 
@@ -166,6 +182,14 @@ DATA_DIR=../story-output
 - `LLM_API_KEY` 是否填写。
 - `LLM_BASE_URL` 是否是可用的 OpenAI 兼容地址。
 - 修改后端代码或 `.env` 后是否已经重启后端。
+
+如果问题和大纲格式有关，可以临时设置：
+
+```env
+DEBUG_AI_RESPONSE=true
+```
+
+然后重启后端，重新生成一次大纲，再查看 `story-output/debug/` 下的原始响应文件。
 
 ### 提示 404
 

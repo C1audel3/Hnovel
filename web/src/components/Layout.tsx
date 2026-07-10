@@ -21,7 +21,7 @@ export function Layout() {
             <Icon name="pen" className="w-5 h-5" />
             Hnovel
           </NavLink>
-          <p className="text-xs text-text-sidebar/50 mt-1">NSFW AI写作平台</p>
+          <p className="text-xs text-text-sidebar/50 mt-1">AI小说创作工作台</p>
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -62,7 +62,7 @@ export function Layout() {
         </nav>
 
         <div className="p-3 border-t border-white/10 text-[11px] text-text-sidebar/40 text-center">
-          Hnovel v0.1
+          Hnovel v1.1
         </div>
       </aside>
 

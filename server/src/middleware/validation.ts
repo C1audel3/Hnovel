@@ -85,23 +85,56 @@ export const generateSchema = z.object({
 })
 
 export const worldItemSchema = z.object({
-  category: z.enum(['locations', 'systems', 'factions', 'artifacts']),
+  category: z.enum(['overview', 'locations', 'systems', 'factions', 'artifacts', 'terms']),
   name: z.string().trim().min(1, '名称不能为空').max(200),
   type: z.string().trim().min(1).max(100),
+  summary: z.string().max(1000).optional(),
   description: z.string().max(10000).optional(),
+  rules: z.string().max(10000).optional(),
+  connections: z.string().max(10000).optional(),
+  tags: z.string().max(2000).optional(),
+  importance: z.enum(['low', 'medium', 'high']).optional(),
+  startChapter: z.number().int().positive().optional(),
+  endChapter: z.number().int().positive().optional(),
+  status: z.enum(['active', 'draft', 'archived']).optional(),
+}).refine(value => !value.startChapter || !value.endChapter || value.startChapter <= value.endChapter, {
+  message: '起始章节不能大于结束章节', path: ['startChapter'],
 })
 
 export const structureSchema = z.object({ structureModel: z.enum(['qichengzhuanhe', 'three-act', 'heros-journey', 'chapter-style']) })
 export const arcSchema = z.object({
   name: z.string().trim().min(1, '故事线名称不能为空').max(200),
-  type: z.enum(['main', 'sub', 'hidden', 'character']),
+  type: z.enum(['main', 'sub', 'hidden', 'character', 'romance', 'growth', 'faction']),
   characters: z.string().max(2000).optional(),
   description: z.string().max(10000).optional(),
+  startChapter: z.number().int().positive().optional(),
+  endChapter: z.number().int().positive().optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+  currentPhase: z.string().max(500).optional(),
+  goal: z.string().max(5000).optional(),
+  conflict: z.string().max(5000).optional(),
+  status: z.enum(['planned', 'active', 'completed', 'paused', 'abandoned']).optional(),
+}).refine(value => !value.startChapter || !value.endChapter || value.startChapter <= value.endChapter, {
+  message: '起始章节不能大于结束章节', path: ['startChapter'],
 })
 export const timelineEventSchema = z.object({
   chapter: z.string().max(100).optional(),
   description: z.string().trim().min(1, '事件描述不能为空').max(10000),
   arc: z.string().optional(),
+  type: z.enum(['main', 'sub', 'turning', 'foreshadow', 'payoff', 'character']).optional(),
+  importance: z.enum(['low', 'medium', 'high']).optional(),
+  characters: z.string().max(2000).optional(),
+  occurred: z.boolean().optional(),
+  notes: z.string().max(10000).optional(),
+})
+export const foreshadowSchema = z.object({
+  name: z.string().trim().min(1, '伏笔名称不能为空').max(200),
+  description: z.string().max(10000).optional(),
+  setupChapter: z.string().max(100).optional(),
+  payoffChapter: z.string().max(100).optional(),
+  arc: z.string().optional(),
+  status: z.enum(['planned', 'planted', 'paid-off', 'abandoned']).optional(),
+  notes: z.string().max(10000).optional(),
 })
 export const outlineSchema = z.object({
   chapters: z.array(z.object({
@@ -109,6 +142,10 @@ export const outlineSchema = z.object({
     title: z.string().trim().min(1, '章节标题不能为空').max(300),
     summary: z.string().max(100000),
     nsfw: z.boolean(),
-    estimatedWords: z.number().int().min(100).max(100000),
+    estimatedWords: z.preprocess((value) => {
+      const words = Number(value)
+      if (!Number.isFinite(words) || words < 100) return 3000
+      return Math.min(Math.round(words), 100000)
+    }, z.number().int().min(100).max(100000)),
   })).max(500).refine(items => new Set(items.map(item => item.number)).size === items.length, '章节编号不能重复'),
 })

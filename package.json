@@ -14,7 +14,9 @@
     "start": "npm run build && npm run start:server",
     "start:server": "cd server && npm run start",
     "lint": "npm run lint:web && npm run lint:server",
-    "test": "npm run test:server"
+    "lint:web": "cd web && npm run lint",
+    "lint:server": "cd server && npm run build",
+    "test": "npm run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

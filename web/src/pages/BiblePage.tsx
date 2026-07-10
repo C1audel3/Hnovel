@@ -10,7 +10,7 @@ export function BiblePage() {
   const { data: story } = useQuery({ queryKey: ['story', id], queryFn: () => fetchStory(id!), enabled: !!id })
 
   const [form, setForm] = useState({
-    title: '', genre: 'school', rating: 'nsfw', explicit_level: 'moderate',
+    title: '', genre: 'school', rating: 'safe', explicit_level: 'moderate',
     synopsis: '', tone_style: '', reference_style: '',
   })
   const [saving, setSaving] = useState<'main' | 'style' | 'profile' | null>(null)
@@ -23,7 +23,7 @@ export function BiblePage() {
       setForm({
         title: story.title || '',
         genre: story.genre || 'school',
-        rating: (story.rating || 'nsfw') as string,
+        rating: (story.rating || 'safe') as string,
         explicit_level: story.explicit_level || 'moderate',
         synopsis: story.synopsis || '',
         tone_style: story.tone_style || '',
@@ -119,15 +119,15 @@ export function BiblePage() {
           <h2 className="font-semibold mb-4">基本信息</h2>
           <div className="grid grid-cols-2 gap-4">
             <Input label="标题" field="title" placeholder="故事标题" />
-            <Select label="分级" field="rating" options={[
-              { value: 'nsfw', label: 'NSFW' }, { value: 'safe', label: '非NSFW' },
+            <Select label="内容分级" field="rating" options={[
+              { value: 'safe', label: '一般向' }, { value: 'nsfw', label: '成人向' },
             ]} />
             <Select label="类型" field="genre" options={[
               { value: 'school', label: '校园' }, { value: 'wuxia', label: '武侠' },
               { value: 'isekai', label: '异世界' }, { value: 'western', label: '西幻' },
             ]} />
-            <Select label="描写尺度" field="explicit_level" options={[
-              { value: 'mild', label: '轻度' }, { value: 'moderate', label: '中度' }, { value: 'graphic', label: '详细' },
+            <Select label="细节程度" field="explicit_level" options={[
+              { value: 'mild', label: '简洁' }, { value: 'moderate', label: '适中' }, { value: 'graphic', label: '详细' },
             ]} />
           </div>
         </div>

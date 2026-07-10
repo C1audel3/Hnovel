@@ -78,7 +78,7 @@ export function ChapterEditPage() {
         <h1 className="text-2xl font-bold">{chapter?.title || `第${num}章`}</h1>
         <div className="flex items-center gap-3 mt-2">
           {chapter && <span className="text-sm text-text-muted">{(content || chapter.content || '').replace(/\s/g, '').length.toLocaleString()} 字</span>}
-          {isNsfwChapter && <span className="text-xs px-2 py-0.5 rounded-full bg-primary-bg text-primary">NSFW内容</span>}
+          {isNsfwChapter && <span className="text-xs px-2 py-0.5 rounded-full bg-primary-bg text-primary">重点场景</span>}
           {rewriteResult && <span className="text-xs px-2 py-0.5 rounded-full bg-success-bg text-success">AI已重写</span>}
         </div>
       </div>
