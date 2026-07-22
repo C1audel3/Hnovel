@@ -1,14 +1,17 @@
 import { useParams, Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteChapter, fetchChapters, getApiErrorMessage } from '../lib/api'
+import { deleteChapter, fetchChapters, getApiErrorMessage, saveChapter } from '../lib/api'
 import { Icon } from '../components/Icon'
+import type { Chapter } from '../lib/types'
 
 export function ChaptersPage() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
   const [exportFrom, setExportFrom] = useState('')
   const [exportTo, setExportTo] = useState('')
+  const [editingTitleNum, setEditingTitleNum] = useState<number | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', id], queryFn: () => fetchChapters(id!), enabled: !!id,
   })
@@ -22,11 +25,43 @@ export function ChaptersPage() {
     },
     onError: error => alert('删除章节失败: ' + getApiErrorMessage(error)),
   })
+  const renameMutation = useMutation({
+    mutationFn: (chapter: Chapter) => saveChapter(id!, chapter.chapter_number, { ...chapter, title: editingTitle.trim() }),
+    onSuccess: (chapter) => {
+      setEditingTitleNum(null)
+      setEditingTitle('')
+      queryClient.setQueryData(['chapter', id, String(chapter.chapter_number)], chapter)
+      queryClient.invalidateQueries({ queryKey: ['chapters', id] })
+      queryClient.invalidateQueries({ queryKey: ['story', id] })
+      queryClient.invalidateQueries({ queryKey: ['stories'] })
+    },
+    onError: error => alert('修改章节标题失败: ' + getApiErrorMessage(error)),
+  })
 
   const handleDelete = (num: number, title: string) => {
     if (confirm(`确认删除第${num}章「${title}」？此操作无法撤销。`)) {
       deleteMutation.mutate(num)
     }
+  }
+  const startRename = (chapter: Chapter) => {
+    setEditingTitleNum(chapter.chapter_number)
+    setEditingTitle(chapter.title)
+  }
+  const cancelRename = () => {
+    setEditingTitleNum(null)
+    setEditingTitle('')
+  }
+  const saveRename = (chapter: Chapter) => {
+    const title = editingTitle.trim()
+    if (!title) {
+      alert('章节标题不能为空')
+      return
+    }
+    if (title === chapter.title) {
+      cancelRename()
+      return
+    }
+    renameMutation.mutate(chapter)
   }
   const exportQuery = useMemo(() => {
     const params = new URLSearchParams()
@@ -110,13 +145,43 @@ export function ChaptersPage() {
           {chapters.map(ch => (
             <div key={ch.id}
               className="bg-bg-card border border-border hover:border-primary/20 rounded-xl p-4 transition-all shadow-sm hover:shadow-md flex items-center justify-between group">
-              <Link to={`/story/${id}/chapters/${ch.chapter_number}`} className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
                 <span className="text-sm font-mono text-text-muted bg-bg-dark px-3 py-1.5 rounded-lg border border-border">Ch.{ch.chapter_number}</span>
                 <div className="min-w-0">
-                  <h3 className="font-medium text-text-primary truncate">{ch.title}</h3>
-                  {ch.outline && <p className="text-xs text-text-muted mt-0.5 line-clamp-1">{ch.outline}</p>}
+                  {editingTitleNum === ch.chapter_number ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={editingTitle}
+                        autoFocus
+                        onChange={e => setEditingTitle(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') saveRename(ch)
+                          if (e.key === 'Escape') cancelRename()
+                        }}
+                        className="w-full max-w-md px-3 py-1.5 bg-bg-dark border border-primary/40 rounded-lg text-sm font-medium text-text-primary focus:border-primary focus:outline-none"
+                      />
+                      <button type="button" onClick={() => saveRename(ch)}
+                        disabled={renameMutation.isPending && renameMutation.variables?.chapter_number === ch.chapter_number}
+                        className="px-2.5 py-1.5 bg-primary text-white rounded-lg text-xs font-medium disabled:opacity-40">
+                        保存
+                      </button>
+                      <button type="button" onClick={cancelRename}
+                        className="px-2.5 py-1.5 border border-border text-text-secondary rounded-lg text-xs">
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => startRename(ch)}
+                        title="点击修改标题"
+                        className="block max-w-full text-left font-medium text-text-primary truncate hover:text-primary">
+                        {ch.title}
+                      </button>
+                      {ch.outline && <p className="text-xs text-text-muted mt-0.5 line-clamp-1">{ch.outline}</p>}
+                    </>
+                  )}
                 </div>
-              </Link>
+              </div>
               <div className="flex items-center gap-3 ml-4 flex-shrink-0">
                 <div className="flex items-center gap-3 text-xs text-text-muted">
                   <span>{ch.word_count.toLocaleString()} 字</span>
@@ -131,6 +196,19 @@ export function ChaptersPage() {
                   className="text-text-muted hover:text-primary transition-colors opacity-0 group-hover:opacity-100 p-1">
                   <Icon name="file" className="w-4 h-4" />
                 </a>
+                <button type="button"
+                  onClick={() => startRename(ch)}
+                  title="修改标题"
+                  aria-label={`修改第${ch.chapter_number}章标题`}
+                  className="text-text-muted hover:text-primary transition-colors opacity-0 group-hover:opacity-100 p-1">
+                  <Icon name="edit" className="w-4 h-4" />
+                </button>
+                <Link to={`/story/${id}/chapters/${ch.chapter_number}`}
+                  title="打开章节"
+                  aria-label={`打开第${ch.chapter_number}章`}
+                  className="text-text-muted hover:text-primary transition-colors opacity-0 group-hover:opacity-100 p-1">
+                  <Icon name="arrowRight" className="w-4 h-4" />
+                </Link>
                 <button type="button"
                   onClick={() => handleDelete(ch.chapter_number, ch.title)}
                   disabled={deleteMutation.isPending && deleteMutation.variables === ch.chapter_number}

@@ -90,6 +90,28 @@ interface SingleChapterOutline {
   }>
 }
 
+interface WordRange {
+  min: number
+  max: number
+  target: number
+}
+
+function buildWordRange(options: GenerateOptions): WordRange {
+  const min = Number(options.minWords)
+  const max = Number(options.maxWords)
+  const safeMin = Number.isFinite(min) && min >= 100 ? Math.round(min) : 2000
+  const safeMax = Number.isFinite(max) && max >= safeMin ? Math.round(max) : Math.max(safeMin, 5000)
+  return {
+    min: safeMin,
+    max: safeMax,
+    target: Math.round((safeMin + safeMax) / 2),
+  }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
 function findFirstJsonArray(text: string): string | null {
   const start = text.indexOf('[')
   if (start < 0) return null
@@ -125,17 +147,59 @@ function findFirstJsonArray(text: string): string | null {
   return null
 }
 
+function stripJsonFence(text: string): string {
+  return text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+}
+
+function findJsonObjectFragments(text: string): string[] {
+  const fragments: string[] = []
+  let start = -1
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+    } else if (char === '{') {
+      if (depth === 0) start = i
+      depth++
+    } else if (char === '}') {
+      if (depth > 0) depth--
+      if (depth === 0 && start >= 0) {
+        fragments.push(text.slice(start, i + 1))
+        start = -1
+      }
+    }
+  }
+
+  return fragments
+}
+
 function parseOutlineResponse(
   text: string,
   startChapter = 1,
   chapterCount?: number,
   isNsfw = true,
 ): GeneratedOutline['chapters'] {
-  const trimmed = text.trim()
-  const withoutFence = trimmed
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim()
+  const withoutFence = stripJsonFence(text)
   const arrayText = findFirstJsonArray(withoutFence)
 
   const candidates = [
@@ -151,6 +215,23 @@ function parseOutlineResponse(
       if (parsed && Array.isArray(parsed.chapters)) return normalizeOutlineChapters(parsed.chapters, startChapter, chapterCount, isNsfw)
     } catch {
       // Try the next candidate.
+    }
+  }
+
+  const objectFragments = findJsonObjectFragments(withoutFence)
+  if (objectFragments.length > 0) {
+    const parsedObjects = objectFragments
+      .map(fragment => {
+        try {
+          return JSON.parse(fragment.replace(/,\s*([}\]])/g, '$1'))
+        } catch {
+          return null
+        }
+      })
+      .filter(Boolean)
+
+    if (parsedObjects.length > 0) {
+      return normalizeOutlineChapters(parsedObjects, startChapter, chapterCount, isNsfw)
     }
   }
 
@@ -289,6 +370,16 @@ function ensureRequestedOutlineRange(
   return expected.map(number => byNumber.get(number)!)
 }
 
+function applyEstimatedWordRange(
+  chapters: GeneratedOutline['chapters'],
+  range: WordRange,
+): GeneratedOutline['chapters'] {
+  return chapters.map(chapter => ({
+    ...chapter,
+    estimatedWords: clampNumber(Math.round(Number(chapter.estimatedWords) || range.target), range.min, range.max),
+  }))
+}
+
 function saveAiDebugResponse(kind: string, content: string, meta: Record<string, unknown> = {}) {
   if (process.env.DEBUG_AI_RESPONSE !== 'true') return
   try {
@@ -312,10 +403,11 @@ async function repairOutlineResponse(
   startChapter: number,
   chapterCount: number,
   isNsfw: boolean,
+  wordRange: WordRange,
 ): Promise<GeneratedOutline['chapters']> {
   const response = await client.chat.completions.create({
     model: MODEL,
-    max_tokens: 6000,
+    max_tokens: 12000,
     temperature: 0,
     messages: [
       {
@@ -324,7 +416,13 @@ async function repairOutlineResponse(
       },
       {
         role: 'user',
-        content: `请把下面的小说章节大纲回复转换为严格JSON数组。数组长度应尽量为${chapterCount}，章节号从第${startChapter}章开始。每个元素必须包含 number、title、summary、nsfw、estimatedWords。nsfw必须是布尔值，estimatedWords必须是数字。${isNsfw ? '允许nsfw为true或false。' : '所有nsfw必须为false。'}
+        content: `请把下面的小说章节大纲回复修复并补全为严格JSON数组。
+要求：
+1. 必须且只能输出第${startChapter}章到第${startChapter + chapterCount - 1}章，共${chapterCount}个元素。
+2. 原始回复如果被截断或缺少后续章节，请根据已有内容补齐缺失章节，不要解释。
+3. 每个元素必须包含 number、title、summary、nsfw、estimatedWords。
+4. number必须是数字；nsfw必须是布尔值；estimatedWords必须是数字且位于 ${wordRange.min}-${wordRange.max} 之间，建议 ${wordRange.target}。
+5. summary写成大纲摘要，不要写成长篇正文，单章控制在120-260个中文字符。${isNsfw ? '允许nsfw为true或false。' : '所有nsfw必须为false。'}
 
 原始回复：
 ${rawText.slice(0, 12000)}`,
@@ -365,13 +463,14 @@ export async function generateChapterOutline(
   while (occupiedChapterNumbers.has(firstMissingChapter)) firstMissingChapter++
   const startChapter = options.chapterNumber || firstMissingChapter
   const chapterCount = options.chapterCount || 5
+  const wordRange = buildWordRange(options)
   const plotContext = buildPlotContext(storyId, startChapter, startChapter + chapterCount - 1)
   const worldContext = buildWorldContext(storyId, startChapter, startChapter + chapterCount - 1)
   const isNsfw = story.rating === 'nsfw'
   const systemPrompt = isNsfw ? NSFW_SYSTEM_PROMPT : SAFE_SYSTEM_PROMPT
   const nsfwOutlineRules = isNsfw
-    ? `- nsfw=true的章节必须包含明确的亲密/性爱场景过程，不要只写“发生关系”“两人亲密”等一句话概括
-- nsfw=true章节的summary必须按过程展开： 性爱场景铺垫 → 前戏 → 多个如口交,手交,传教士等的做爱环节 → 场景收束与后续影响
+    ? `- nsfw=true的章节需要概括亲密场景的叙事过程，但必须保持“大纲摘要”粒度，不要写成正文片段或长段细节
+- nsfw=true章节的summary按“铺垫 → 互动升级 → 情绪/关系转折 → 场景收束与后续影响”概括即可，最好堆砌具体动作,以便描述具体的做爱场景
 - 亲密场景必须服务人物关系和剧情推进，每个NSFW章节至少改变一种状态：关系、秘密、权力、承诺、误会、欲望、依赖或冲突
 - false章节为剧情过渡，但也要为后续NSFW章节埋下动机、环境、误会、情绪压力或人物状态
 - NSFW与剧情章节交替安排，避免连续重复同一种场景结构`
@@ -382,7 +481,7 @@ export async function generateChapterOutline(
 
   const response = await client.chat.completions.create({
     model: MODEL,
-    max_tokens: 6000,
+    max_tokens: 12000,
     temperature: 0.8,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -408,13 +507,16 @@ ${plotContext || '（暂无情节规划参考）'}
   {
     "number": ${startChapter},
     "title": "章节标题（有提示的必须体现提示内容）",
-    "summary": "本章摘要，120-250字（有提示的必须基于提示扩写；若nsfw=true，必须写出亲密场景的过程、情绪变化、关键转折和收束后果）",
+    "summary": "本章摘要，120-220字。只写大纲，不写正文。若nsfw=true，只概括亲密场景的叙事阶段、情绪变化、关键转折和后续影响。",
     "nsfw": ${isNsfw ? 'true或false - 本章是否包含NSFW情欲内容' : 'false'},
-    "estimatedWords": 3000
+    "estimatedWords": ${wordRange.target}
   }
 ]
 
 ## 要求
+- 必须生成且只生成第${startChapter}-${startChapter + chapterCount - 1}章，共${chapterCount}章；不得缺章、跳章、生成额外章节
+- summary必须简洁，单章最多260个中文字符；不要把正文片段、对白长段或动作细节塞进summary
+- estimatedWords必须是数字，并且必须落在每章 ${wordRange.min}-${wordRange.max} 字范围内；普通章节可接近 ${wordRange.target}，重点章节可略高但不得超过上限
 - 主体方向控制整批章节的总体推进，逐章提示控制对应章节的具体内容
 - 将总体目标拆分为递进的阶段，不要在前几章过早完成全部目标
 - 严格按逐章提示生成对应章节，不得忽略或替换用户指定的内容
@@ -433,13 +535,13 @@ ${nsfwOutlineRules}
   } catch (error) {
     console.warn('Failed to parse outline response, trying JSON repair:', error instanceof Error ? error.message : error)
     try {
-      chapters_arr = ensureRequestedOutlineRange(await repairOutlineResponse(text, startChapter, chapterCount, isNsfw), startChapter, chapterCount)
+      chapters_arr = ensureRequestedOutlineRange(await repairOutlineResponse(text, startChapter, chapterCount, isNsfw, wordRange), startChapter, chapterCount)
     } catch (repairError) {
       console.warn('Failed to repair outline response, trying loose text parser:', repairError instanceof Error ? repairError.message : repairError)
       chapters_arr = ensureRequestedOutlineRange(parseLooseOutlineResponse(text, startChapter, chapterCount, isNsfw), startChapter, chapterCount)
     }
   }
-  return { title: story.title, chapters: chapters_arr }
+  return { title: story.title, chapters: applyEstimatedWordRange(chapters_arr, wordRange) }
 }
 
 export async function generateChapter(
@@ -473,6 +575,7 @@ export async function generateChapter(
   const referenceSample = buildStyleSample(referenceStyle)
   const outlineWindow = buildOutlineWindow(chapNum, chapSummary, plannedOutline, chapters)
   const worldContext = buildWorldContext(storyId, chapNum, chapNum)
+  const plotContext = buildPlotContext(storyId, chapNum, chapNum)
 
   const storyContext = buildStoryContext(story, chapters, characters, options)
 
@@ -484,11 +587,11 @@ export async function generateChapter(
     ? `描写尺度: ${options.explicitLevel}`
     : '描写尺度: moderate'
 
-  // Get last 2 chapters for continuity
-  const recentChapters = chapters.filter((chapter: any) => chapter.chapter_number < chapNum).slice(-2)
-  const recentContent = recentChapters.map((ch: any) =>
-    `第${ch.chapter_number}章 ${ch.title}\n${(ch.content || '').slice(0, 1500)}...`
-  ).join('\n\n---\n\n')
+  // Use only the previous chapter for direct continuity.
+  const previousChapter = chapters.find((chapter: any) => Number(chapter.chapter_number) === chapNum - 1)
+  const previousContent = previousChapter?.content
+    ? `第${previousChapter.chapter_number}章 ${previousChapter.title}\n${String(previousChapter.content).slice(0, 2500)}...`
+    : ''
 
   const response = await client.chat.completions.create({
     model: MODEL,
@@ -522,14 +625,17 @@ ${storyContext}
 ## 世界观参考
 ${worldContext || '（暂无世界观参考）'}
 
-## 最近章节内容（用于连续性参考）
-${recentContent || '（暂无已写章节）'}
+## 情节规划参考
+${plotContext || '（暂无情节规划参考）'}
+
+## 上一章正文（用于连续性参考）
+${previousContent || '（暂无上一章正文，忽略此项）'}
 
 ## 相邻章节大纲（用于整体规划）
 ${outlineWindow || '（暂无相邻章节大纲）'}
 
 使用规则：
-- 前置章节是已经发生的因果与角色状态，必须自然承接，不得重复演一遍
+- 如果提供了上一章正文，必须自然承接其中已经发生的因果、人物状态和场景余波，不得重复演一遍；如果没有上一章正文，则忽略该项
 - 当前章节必须完成其概要中的核心事件
 - 后续章节只用于提前埋伏笔、控制节奏和保留人物动机，不得提前完成其核心事件或直接剧透
 - 若正文历史与计划大纲冲突，以已经写成的正文为准，并尽量平滑衔接后续计划

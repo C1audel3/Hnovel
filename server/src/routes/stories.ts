@@ -167,7 +167,7 @@ storyRouter.post('/:id/analyze-style', async (req: Request, res: Response) => {
     const profile = await analyzeWritingStyle(referenceText)
     db.prepare("UPDATE stories SET style_profile = ?, updated_at = datetime('now') WHERE id = ?")
       .run(profile, String(req.params.id))
-    res.json({ profile, sourceLength: referenceText.length, analyzedLength: Math.min(referenceText.length, 12000) })
+    res.json({ profile, sourceLength: referenceText.length, analyzedLength: Math.min(referenceText.length, 60000) })
   } catch (err: any) {
     res.status(500).json({ error: err.message || '风格分析失败', code: 'STYLE_ANALYSIS_FAILED' })
   }

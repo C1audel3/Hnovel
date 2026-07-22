@@ -9,12 +9,12 @@
   --color-bg-dark: #f5f2ed;
   --color-bg-card: #ffffff;
   --color-bg-card-hover: #faf8f5;
-  --color-bg-sidebar: #2c2416;
+  --color-bg-sidebar: #fbf8f2;
   --color-text-primary: #2c2416;
   --color-text-secondary: #6b6258;
   --color-text-muted: #9c9488;
-  --color-text-sidebar: #c8bfb0;
-  --color-text-sidebar-active: #ffffff;
+  --color-text-sidebar: #4a4035;
+  --color-text-sidebar-active: #1f1a14;
   --color-border: #e5e0d8;
   --color-border-light: #f0ece5;
   --color-success: #7c9a6e;
@@ -39,18 +39,167 @@
 @keyframes scale-in { from { opacity: 0; transform: scale(0.95) } to { opacity: 1; transform: scale(1) } }
 @keyframes fade-in-up { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes skeleton { 0%, 100% { opacity: 1 } 50% { opacity: .4 } }
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(14px) scale(.992); filter: blur(2px) }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0) }
+}
+@keyframes card-soft-enter {
+  from { opacity: 0; transform: translateY(10px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+@keyframes soft-pop {
+  0% { transform: scale(.98); opacity: .75 }
+  100% { transform: scale(1); opacity: 1 }
+}
+@keyframes shimmer {
+  from { background-position: 200% 0 }
+  to { background-position: -200% 0 }
+}
 
 body {
   background-color: var(--color-bg-dark);
   color: var(--color-text-primary);
   margin: 0;
-  font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  font-family: 'Segoe WPC', 'Segoe UI', 'Microsoft YaHei UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 #root { min-height: 100vh }
 
-/* Base page enter animation */
-main > div { animation: var(--animate-slide-up) }
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+/* Smooth page transitions */
+.page-transition {
+  animation: page-enter .36s cubic-bezier(.2, .8, .2, 1);
+  will-change: opacity, transform;
+}
+
+.page-transition > div,
+.page-transition section,
+.page-transition .bg-bg-card {
+  animation: card-soft-enter .42s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.page-transition .bg-bg-card:nth-of-type(1) { animation-delay: .02s }
+.page-transition .bg-bg-card:nth-of-type(2) { animation-delay: .05s }
+.page-transition .bg-bg-card:nth-of-type(3) { animation-delay: .08s }
+.page-transition .bg-bg-card:nth-of-type(4) { animation-delay: .11s }
+.page-transition .bg-bg-card:nth-of-type(5) { animation-delay: .14s }
+.page-transition .bg-bg-card:nth-of-type(6) { animation-delay: .17s }
+
+/* Unified interactive controls */
+button,
+a,
+summary,
+input,
+textarea,
+select {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity, filter;
+  transition-duration: .2s;
+  transition-timing-function: cubic-bezier(.2, .8, .2, 1);
+}
+
+button,
+a[href],
+summary {
+  position: relative;
+}
+
+button:not(:disabled),
+a[href],
+summary {
+  cursor: pointer;
+}
+
+button:not(:disabled):hover,
+a[href]:hover,
+summary:hover {
+  transform: translateY(-1px);
+}
+
+button:not(:disabled):active,
+a[href]:active,
+summary:active {
+  transform: translateY(0) scale(.98);
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  filter: saturate(.65);
+}
+
+button[class*="bg-primary"],
+a[class*="bg-primary"] {
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  box-shadow: 0 8px 18px -12px color-mix(in srgb, var(--color-primary) 75%, #000);
+}
+
+button[class*="bg-primary"]:not(:disabled):hover,
+a[class*="bg-primary"]:hover {
+  box-shadow: 0 14px 26px -16px color-mix(in srgb, var(--color-primary) 90%, #000);
+  filter: brightness(1.03);
+}
+
+button[class*="border-border"],
+a[class*="border-border"] {
+  backdrop-filter: blur(8px);
+}
+
+button[class*="border-border"]:not(:disabled):hover,
+a[class*="border-border"]:hover {
+  background-color: var(--color-bg-card-hover);
+  border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+}
+
+button[class*="text-danger"]:not(:disabled):hover,
+a[class*="text-danger"]:hover {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+/* Card hover polish */
+.bg-bg-card,
+.bg-bg-dark {
+  transition: border-color .2s cubic-bezier(.2, .8, .2, 1),
+    box-shadow .2s cubic-bezier(.2, .8, .2, 1),
+    transform .2s cubic-bezier(.2, .8, .2, 1),
+    background-color .2s cubic-bezier(.2, .8, .2, 1);
+}
+
+.bg-bg-card.border:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
+  box-shadow: 0 10px 28px -24px rgba(44, 36, 22, .5);
+}
+
+details[open] {
+  animation: soft-pop .2s ease-out;
+}
+
+.number-no-spin::-webkit-outer-spin-button,
+.number-no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.number-no-spin {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
 
 /* Card animations */
 .card-enter {
@@ -90,6 +239,9 @@ nav a {
   transition: all 0.2s ease;
 }
 nav a:hover { transform: translateX(2px) }
+nav a[aria-current="page"] {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-primary-light) 85%, white);
+}
 
 /* Loading skeleton */
 .skeleton {
@@ -99,6 +251,16 @@ nav a:hover { transform: translateX(2px) }
   border-radius: 0.5rem;
 }
 
+.animate-spin {
+  animation-duration: .8s;
+}
+
+.shimmer {
+  background-image: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
 /* Spinner */
 @keyframes spin { to { transform: rotate(360deg) } }
 
@@ -106,3 +268,23 @@ nav a:hover { transform: translateX(2px) }
 ::-webkit-scrollbar-track { background: var(--color-bg-dark) }
 ::-webkit-scrollbar-thumb { background: #d9d3ca; border-radius: 3px }
 ::-webkit-scrollbar-thumb:hover { background: #b8b0a4 }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .001ms !important;
+  }
+
+  button:not(:disabled):hover,
+  a[href]:hover,
+  summary:hover,
+  button:not(:disabled):active,
+  a[href]:active,
+  summary:active {
+    transform: none;
+  }
+}

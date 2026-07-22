@@ -94,6 +94,226 @@ async function parseOrRepairJsonObject(rawText: string, schemaHint: string): Pro
   }
 }
 
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(item => String(item)).filter(Boolean)
+  if (typeof value === 'string' && value.trim()) return value.split(/[；;\n]/).map(item => item.trim()).filter(Boolean)
+  return []
+}
+
+function normalizeWritingPlan(draft: any, chapterStart: number, chapterCount: number, savedOutline: any[] = []) {
+  const rawChapters = Array.isArray(draft?.chapterPlans) ? draft.chapterPlans : []
+  const normalizedChapters = rawChapters.map((chapter: any, index: number) => ({
+    number: Number(chapter?.number) || chapterStart + index,
+    goal: String(chapter?.goal || chapter?.summary || '推进当前故事线'),
+    keyEvents: asStringArray(chapter?.keyEvents),
+    characterFocus: asStringArray(chapter?.characterFocus),
+    notes: String(chapter?.notes || ''),
+  }))
+  const byNumber = new Map(normalizedChapters.map((chapter: any) => [chapter.number, chapter]))
+  const outlineByNumber = new Map(savedOutline.map(chapter => [Number(chapter.number), chapter]))
+
+  return {
+    overview: String(draft?.overview || '暂无总览'),
+    currentStatus: String(draft?.currentStatus || '暂无进度判断'),
+    chapterPlans: Array.from({ length: chapterCount }, (_, index) => {
+      const number = chapterStart + index
+      const chapter = byNumber.get(number)
+      if (chapter) return chapter
+
+      const outlineChapter = outlineByNumber.get(number) as any
+      return {
+        number,
+        goal: outlineChapter?.summary
+          ? `围绕“${outlineChapter.title || `第${number}章`}”推进：${String(outlineChapter.summary).slice(0, 100)}`
+          : '承接前文，推进当前主线并为后续章节保留钩子',
+        keyEvents: outlineChapter?.title ? [String(outlineChapter.title)] : [],
+        characterFocus: [],
+        notes: outlineChapter ? '由已保存大纲自动补齐' : '资料不足，建议补充本章大纲或情节规划',
+      }
+    }),
+    suggestions: asStringArray(draft?.suggestions),
+    risks: asStringArray(draft?.risks),
+  }
+}
+
+function buildFallbackWritingPlan(input: {
+  story: any
+  chapters: any[]
+  outline: any[]
+  characters: any[]
+  arcs: any[]
+  worldItems: any[]
+  chapterStart: number
+  chapterCount: number
+  focus: string
+  reason?: string
+}) {
+  const { story, chapters, outline, characters, arcs, worldItems, chapterStart, chapterCount, focus, reason } = input
+  const outlineByNumber = new Map(outline.map(chapter => [Number(chapter.number), chapter]))
+  const mainCharacters = characters
+    .filter(character => character.importance === 'high' || character.role === 'protagonist')
+    .slice(0, 4)
+    .map(character => character.name)
+  const activeArcs = arcs
+    .filter(arc => arc.status !== 'completed' && arc.status !== 'abandoned')
+    .slice(0, 3)
+    .map(arc => arc.name)
+
+  return normalizeWritingPlan({
+    overview: focus || activeArcs.length > 0
+      ? `接下来优先推进${activeArcs.join('、') || '当前主线'}，并保持章节目标清晰。`
+      : '接下来先承接已写内容，补足人物动机，再逐步推进后续大纲。',
+    currentStatus: `当前故事《${story.title}》已有 ${chapters.length} 章正文、${outline.length} 条大纲。此计划由本地资料整理生成，可作为临时参考。`,
+    chapterPlans: Array.from({ length: chapterCount }, (_, index) => {
+      const number = chapterStart + index
+      const outlineChapter = outlineByNumber.get(number) as any
+      return {
+        number,
+        goal: outlineChapter?.summary
+          ? `完成“${outlineChapter.title}”的核心事件：${String(outlineChapter.summary).slice(0, 120)}`
+          : '承接上一章状态，推进一个明确事件，并在结尾留下下一章动机',
+        keyEvents: outlineChapter?.title ? [String(outlineChapter.title)] : [],
+        characterFocus: mainCharacters,
+        notes: outlineChapter ? '参考已保存大纲，不参与自动生成' : '暂无对应大纲，建议先补充章节目标',
+      }
+    }),
+    suggestions: [
+      activeArcs.length > 0 ? `优先维护故事线：${activeArcs.join('、')}` : '建议在情节管理中补充一条当前主线',
+      worldItems.length > 0 ? '写作时注意沿用已有世界观条目，避免规则前后不一致' : '世界观资料较少，可补充关键地点、势力或规则',
+      reason ? `AI 返回格式异常，已使用本地资料兜底：${reason}` : '',
+    ].filter(Boolean),
+    risks: [
+      outline.length === 0 ? '当前没有已保存大纲，计划只能给出通用推进建议' : '',
+      characters.length === 0 ? '当前没有角色资料，角色推进建议会比较弱' : '',
+    ].filter(Boolean),
+  }, chapterStart, chapterCount, outline)
+}
+
+planningRouter.post('/:id/writing-plan/generate', async (req: Request, res: Response) => {
+  try {
+    const db = getDatabase()
+    const id = storyId(req)
+    const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(id) as any
+    if (!story) return res.status(404).json({ error: 'Story not found', code: 'NOT_FOUND' })
+
+    const chapters = db.prepare(`SELECT chapter_number, title, outline, content, word_count, status
+      FROM chapters WHERE story_id = ? ORDER BY chapter_number ASC`).all(id) as any[]
+    const outline = db.prepare(`SELECT chapter_number AS number, title, summary, is_nsfw AS nsfw, estimated_words AS estimatedWords
+      FROM outline_chapters WHERE story_id = ? ORDER BY chapter_number ASC`).all(id) as any[]
+    const characters = db.prepare(`SELECT name, role, importance, personality, current_goal, core_conflict, character_arc, relation_to_plot, writing_notes
+      FROM characters WHERE story_id = ? ORDER BY created_at ASC LIMIT 30`).all(id)
+    const relationships = db.prepare(`SELECT c1.name AS source, c2.name AS target, cr.rel_type AS type, cr.status, cr.phase, cr.description
+      FROM character_relationships cr
+      LEFT JOIN characters c1 ON cr.source_id = c1.id
+      LEFT JOIN characters c2 ON cr.target_id = c2.id
+      WHERE cr.story_id = ? ORDER BY cr.created_at ASC LIMIT 30`).all(id)
+    const worldItems = db.prepare(`SELECT category, name, item_type AS type, summary, rules, importance
+      FROM world_items WHERE story_id = ? AND status != 'archived' ORDER BY created_at ASC LIMIT 30`).all(id)
+    const arcs = db.prepare(`SELECT name, arc_type AS type, goal, conflict, current_phase AS currentPhase, status, start_chapter AS startChapter, end_chapter AS endChapter
+      FROM story_arcs WHERE story_id = ? ORDER BY created_at ASC LIMIT 20`).all(id)
+    const events = db.prepare(`SELECT chapter, description, event_type AS type, importance, occurred
+      FROM timeline_events WHERE story_id = ? ORDER BY created_at ASC LIMIT 40`).all(id)
+    const foreshadows = db.prepare(`SELECT name, description, setup_chapter AS setupChapter, payoff_chapter AS payoffChapter, status
+      FROM foreshadows WHERE story_id = ? ORDER BY created_at ASC LIMIT 20`).all(id)
+
+    const writtenNumbers = new Set(chapters.map(chapter => Number(chapter.chapter_number) || 0))
+    let nextChapter = 1
+    while (writtenNumbers.has(nextChapter)) nextChapter++
+    const chapterStart = Math.max(1, Number(req.body?.chapterStart) || nextChapter)
+    const chapterCount = Math.min(12, Math.max(1, Number(req.body?.chapterCount) || 5))
+    const focus = String(req.body?.focus || '').trim()
+    const recentChapters = chapters.slice(-3).map(chapter => ({
+      number: chapter.chapter_number,
+      title: chapter.title,
+      outline: String(chapter.outline || '').slice(0, 800),
+      contentExcerpt: String(chapter.content || '').slice(0, 1200),
+      wordCount: chapter.word_count,
+      status: chapter.status,
+    }))
+
+    try {
+      const response = await getOpenAI().chat.completions.create({
+        model: MODEL,
+        temperature: 0.7,
+        max_tokens: 4000,
+        messages: [
+          { role: 'system', content: '你是专业的长篇小说写作规划顾问。只返回严格JSON对象，不返回Markdown、解释或前后缀。' },
+          {
+            role: 'user',
+            content: `请根据现有资料，给作者一份简洁的写作计划。这个计划只给用户阅读，不会自动参与后续大纲或正文生成。
+
+计划范围：第${chapterStart}章起，共${chapterCount}章
+用户关注点：${focus || '无'}
+
+故事资料：
+${JSON.stringify({
+            story: {
+              title: story.title,
+              genre: story.genre,
+              subGenre: story.sub_genre,
+              rating: story.rating,
+              synopsis: story.synopsis,
+              toneStyle: story.tone_style,
+              status: story.status,
+              totalWords: story.total_words,
+            },
+            recentChapters,
+            savedOutline: outline,
+            characters,
+            relationships,
+            worldItems,
+            plot: { arcs, events, foreshadows },
+          })}
+
+返回JSON格式：
+{
+  "overview": "一句话说明接下来整体怎么写",
+  "currentStatus": "当前故事进度判断，80-180字",
+  "chapterPlans": [
+    {
+      "number": ${chapterStart},
+      "goal": "本章写作目标，40-100字",
+      "keyEvents": ["关键事件1", "关键事件2"],
+      "characterFocus": ["角色或关系推进1", "角色或关系推进2"],
+      "notes": "写作提醒，可为空"
+    }
+  ],
+  "suggestions": ["节奏/角色/情节建议"],
+  "risks": ["可能的风险或前后矛盾提醒"]
+}
+
+要求：
+1. 必须且只能输出JSON对象，第一字符是 {，最后字符是 }。
+2. chapterPlans必须覆盖第${chapterStart}章到第${chapterStart + chapterCount - 1}章。
+3. 内容简洁，不要写正文，不要生成完整大纲。
+4. 如资料不足，明确提醒需要补充什么。`,
+          },
+        ],
+      })
+
+      const raw = response.choices[0]?.message?.content || ''
+      const draft = await parseOrRepairJsonObject(raw, 'overview,currentStatus,chapterPlans[number,goal,keyEvents,characterFocus,notes],suggestions,risks')
+      res.json(normalizeWritingPlan(draft, chapterStart, chapterCount, outline))
+    } catch (aiError: any) {
+      console.warn('Writing plan AI generation failed, using local fallback:', aiError instanceof Error ? aiError.message : aiError)
+      res.json(buildFallbackWritingPlan({
+        story,
+        chapters,
+        outline,
+        characters: characters as any[],
+        arcs: arcs as any[],
+        worldItems: worldItems as any[],
+        chapterStart,
+        chapterCount,
+        focus,
+        reason: aiError?.message || String(aiError || '未知错误'),
+      }))
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || '写作计划生成失败', code: 'WRITING_PLAN_GENERATION_FAILED' })
+  }
+})
+
 planningRouter.get('/:id/world-items', (req: Request, res: Response) => {
   const rows = getDatabase().prepare(`
     SELECT id, category, name, item_type AS type, summary, description, rules,

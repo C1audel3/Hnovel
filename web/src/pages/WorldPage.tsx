@@ -2,7 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Icon } from '../components/Icon'
-import { createWorldItem, deleteWorldItem, fetchWorldItems, generateWorldItemDraft, getApiErrorMessage, updateWorldItem } from '../lib/api'
+import { AiErrorPanel } from '../components/AiErrorPanel'
+import { createWorldItem, deleteWorldItem, fetchWorldItems, generateWorldItemDraft, getApiErrorDiagnostic, getApiErrorMessage, updateWorldItem, type ApiErrorDiagnostic } from '../lib/api'
 import type { WorldCategory, WorldItem } from '../lib/types'
 
 type WorldItemForm = Omit<WorldItem, 'id'>
@@ -60,6 +61,7 @@ export function WorldPage() {
   const [editingItem, setEditingItem] = useState<WorldItem | null>(null)
   const [form, setForm] = useState<WorldItemForm>(() => createDefaultForm('overview'))
   const [aiInput, setAiInput] = useState({ name: '', hints: '' })
+  const [aiError, setAiError] = useState<ApiErrorDiagnostic | null>(null)
 
   const { data: items = [] } = useQuery({
     queryKey: ['world-items', id],
@@ -93,6 +95,7 @@ export function WorldPage() {
   const aiMutation = useMutation({
     mutationFn: () => generateWorldItemDraft(id!, { category: activeTab, name: aiInput.name || undefined, hints: aiInput.hints || undefined }),
     onSuccess: draft => {
+      setAiError(null)
       const category = (draft.category || activeTab) as WorldCategory
       setForm({
         ...createDefaultForm(category),
@@ -109,7 +112,7 @@ export function WorldPage() {
       setMode('manual')
       setEditingItem(null)
     },
-    onError: error => alert('AI生成失败: ' + getApiErrorMessage(error)),
+    onError: error => setAiError(getApiErrorDiagnostic(error, 'AI 世界观生成失败')),
   })
 
   const beginCreate = () => {
@@ -176,6 +179,7 @@ export function WorldPage() {
           <Icon name="plus" className="w-4 h-4" /> 新增设定
         </button>
       </div>
+      <AiErrorPanel diagnostic={aiError} onClose={() => setAiError(null)} />
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 mb-6">
         {tabs.map(tab => {

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Icon } from '../components/Icon'
+import { AiErrorPanel } from '../components/AiErrorPanel'
 import {
   createForeshadow,
   createStoryArc,
@@ -11,9 +12,11 @@ import {
   deleteTimelineEvent,
   fetchPlot,
   generatePlotDraft,
+  getApiErrorDiagnostic,
   getApiErrorMessage,
   savePlotStructure,
 } from '../lib/api'
+import type { ApiErrorDiagnostic } from '../lib/api'
 import type { Foreshadow, StoryArc, TimelineEvent } from '../lib/types'
 
 const structureModels = [
@@ -72,6 +75,7 @@ export function PlotPage() {
     hints: '',
   })
   const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiError, setAiError] = useState<ApiErrorDiagnostic | null>(null)
 
   useEffect(() => {
     if (!plot) return
@@ -83,6 +87,7 @@ export function PlotPage() {
 
   const handleGeneratePlot = async () => {
     setAiGenerating(true)
+    setAiError(null)
     try {
       const draft = await generatePlotDraft(id!, aiInput)
       if ((draft.kind || aiInput.kind) === 'event') {
@@ -117,7 +122,7 @@ export function PlotPage() {
         setShowArcForm(true)
       }
     } catch (error) {
-      alert('AI生成失败: ' + getApiErrorMessage(error))
+      setAiError(getApiErrorDiagnostic(error, 'AI 情节生成失败'))
     } finally {
       setAiGenerating(false)
     }
@@ -193,6 +198,7 @@ export function PlotPage() {
 
       <h1 className="text-2xl font-bold mb-1">情节管理</h1>
       <p className="text-text-secondary mb-6">轻量维护故事线、时间线与伏笔，并支持 AI 生成草稿。</p>
+      <AiErrorPanel diagnostic={aiError} onClose={() => setAiError(null)} />
 
       <section className="bg-bg-card border border-border rounded-2xl p-5 shadow-sm mb-6">
         <h2 className="font-bold mb-4 flex items-center gap-2"><Icon name="sparkle" className="w-5 h-5 text-primary" />AI 生成情节草稿</h2>

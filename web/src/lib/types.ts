@@ -124,6 +124,22 @@ export interface GeneratedChapter {
   wordCount: number
 }
 
+export interface WritingPlanChapter {
+  number: number
+  goal: string
+  keyEvents: string[]
+  characterFocus: string[]
+  notes: string
+}
+
+export interface WritingPlan {
+  overview: string
+  currentStatus: string
+  chapterPlans: WritingPlanChapter[]
+  suggestions: string[]
+  risks: string[]
+}
+
 export type WorldCategory = 'overview' | 'locations' | 'systems' | 'factions' | 'artifacts' | 'terms'
 export interface WorldItem {
   id: string

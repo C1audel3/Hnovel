@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { fetchStory, generateOutline, generateChapter, fetchChapters, fetchOutline, getApiErrorMessage, saveOutline } from '../lib/api'
+import { fetchStory, generateOutline, generateChapter, generateWritingPlan, fetchChapters, fetchOutline, getApiErrorDiagnostic, getApiErrorMessage, saveOutline, type ApiErrorDiagnostic } from '../lib/api'
 import { Icon } from '../components/Icon'
+import { AiErrorPanel } from '../components/AiErrorPanel'
 import { useWriteStore } from '../stores/writeStore'
-import type { OutlineChapter } from '../lib/types'
+import type { OutlineChapter, WritingPlan } from '../lib/types'
 
 export function WritePage() {
   const { id } = useParams<{ id: string }>()
@@ -30,11 +31,17 @@ export function WritePage() {
   while (occupiedChapterNumbers.has(nextChapterNum)) nextChapterNum++
   const maxWrittenChapter = existingChapters?.reduce((max, chapter) => Math.max(max, chapter.chapter_number || 0), 0) || 0
   const maxSavedOutlineChapter = outlineChapters.reduce((max, chapter) => Math.max(max, chapter.number || 0), 0)
+  const outlineActionButtonClass = 'inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-primary border border-primary/50 text-white hover:bg-primary-dark hover:border-primary-dark rounded-xl text-sm font-medium transition-all shadow-sm shadow-primary/20 whitespace-nowrap'
 
   const [generating, setGenerating] = useState(false)
   const [writingIndex, setWritingIndex] = useState(-1)
   const [editingChapter, setEditingChapter] = useState(-1)
   const [editForm, setEditForm] = useState({ title: '', summary: '' })
+  const [aiError, setAiError] = useState<ApiErrorDiagnostic | null>(null)
+  const [showExistingChapters, setShowExistingChapters] = useState(false)
+  const [planning, setPlanning] = useState(false)
+  const [writingPlan, setWritingPlan] = useState<WritingPlan | null>(null)
+  const wordStepperButtonClass = 'px-3 bg-primary text-white hover:bg-primary-dark font-semibold'
 
   useEffect(() => {
     if (!id) return
@@ -42,6 +49,10 @@ export function WritePage() {
     setGenerating(false)
     setWritingIndex(-1)
     setEditingChapter(-1)
+    setAiError(null)
+    setShowExistingChapters(false)
+    setPlanning(false)
+    setWritingPlan(null)
   }, [id, switchStory])
 
   useEffect(() => {
@@ -76,10 +87,11 @@ export function WritePage() {
 
   const handleGenerateOutline = async () => {
     const requestStoryId = id!
+    setAiError(null)
     setGenerating(true)
     try {
       const result = await generateOutline(requestStoryId, {
-        chapterCount, chapterNumber: nextChapterNum, intensityLevel: 10, explicitLevel: 'graphic',
+        chapterCount, chapterNumber: nextChapterNum, minWords, maxWords, intensityLevel: 10, explicitLevel: 'graphic',
         outlineDirection: outlineDirection.trim() || undefined,
         focusCharacters: focusCharacters ? focusCharacters.split(',').map(s => s.trim()).filter(Boolean) : undefined,
         additionalInstructions: (() => {
@@ -99,7 +111,9 @@ export function WritePage() {
       setOutlineChapters(nextOutline)
       setPhase('outline')
     } catch (error) {
-      if (useWriteStore.getState().activeStoryId === requestStoryId) alert('AI大纲生成失败: ' + getApiErrorMessage(error))
+      if (useWriteStore.getState().activeStoryId === requestStoryId) {
+        setAiError(getApiErrorDiagnostic(error, 'AI 大纲生成失败'))
+      }
     } finally {
       if (useWriteStore.getState().activeStoryId === requestStoryId) setGenerating(false)
     }
@@ -107,6 +121,7 @@ export function WritePage() {
 
   const handleGenerateChapter = async (chap: OutlineChapter) => {
     const requestStoryId = id!
+    setAiError(null)
     setWritingIndex(chap.number); setGenerating(true); setGeneratedChapter(null)
     try {
       const result = await generateChapter(requestStoryId, {
@@ -122,7 +137,9 @@ export function WritePage() {
         addGeneratedChapter(chap.number)
       }
     } catch (error) {
-      if (useWriteStore.getState().activeStoryId === requestStoryId) alert('章节生成失败: ' + getApiErrorMessage(error))
+      if (useWriteStore.getState().activeStoryId === requestStoryId) {
+        setAiError(getApiErrorDiagnostic(error, `第${chap.number}章生成失败`))
+      }
     } finally {
       if (useWriteStore.getState().activeStoryId === requestStoryId) setGenerating(false)
     }
@@ -157,9 +174,15 @@ export function WritePage() {
 
   const appendOutlineChapter = () => {
     const maxNum = Math.max(maxWrittenChapter, maxSavedOutlineChapter)
-    const next = [...outlineChapters, { number: maxNum + 1, title: '新章节', summary: '在此编辑章节概要...', nsfw: isNsfw, estimatedWords: 3000 }]
+    const estimatedWords = Math.round((minWords + maxWords) / 2)
+    const next = [...outlineChapters, { number: maxNum + 1, title: '新章节', summary: '在此编辑章节概要...', nsfw: isNsfw, estimatedWords }]
     setOutlineChapters(next)
     saveOutlineChanges(next)
+  }
+
+  const adjustWordSetting = (field: 'minWords' | 'maxWords', delta: number) => {
+    const current = field === 'minWords' ? minWords : maxWords
+    setConfig({ [field]: Math.max(100, Number(current || 0) + delta) })
   }
 
   const clearOutline = async () => {
@@ -198,6 +221,52 @@ export function WritePage() {
     saveOutlineChanges(next)
   }
 
+  const formatWritingPlan = (plan: WritingPlan) => [
+    `写作计划：${plan.overview}`,
+    '',
+    `当前状态：${plan.currentStatus}`,
+    '',
+    '章节计划：',
+    ...plan.chapterPlans.map(chapter => [
+      `第${chapter.number}章：${chapter.goal}`,
+      chapter.keyEvents.length > 0 ? `关键事件：${chapter.keyEvents.join('；')}` : '',
+      chapter.characterFocus.length > 0 ? `角色推进：${chapter.characterFocus.join('；')}` : '',
+      chapter.notes ? `提醒：${chapter.notes}` : '',
+    ].filter(Boolean).join('\n')),
+    '',
+    plan.suggestions.length > 0 ? `建议：\n${plan.suggestions.map(item => `- ${item}`).join('\n')}` : '',
+    plan.risks.length > 0 ? `风险：\n${plan.risks.map(item => `- ${item}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n')
+
+  const handleGenerateWritingPlan = async () => {
+    const requestStoryId = id!
+    setAiError(null)
+    setPlanning(true)
+    try {
+      const plan = await generateWritingPlan(requestStoryId, {
+        chapterStart: nextChapterNum,
+        chapterCount: Math.min(chapterCount || 5, 12),
+        focus: outlineDirection.trim() || undefined,
+      })
+      if (useWriteStore.getState().activeStoryId === requestStoryId) setWritingPlan(plan)
+    } catch (error) {
+      if (useWriteStore.getState().activeStoryId === requestStoryId) {
+        setAiError(getApiErrorDiagnostic(error, 'AI 写作计划生成失败'))
+      }
+    } finally {
+      if (useWriteStore.getState().activeStoryId === requestStoryId) setPlanning(false)
+    }
+  }
+
+  const copyWritingPlan = async () => {
+    if (!writingPlan) return
+    try {
+      await navigator.clipboard.writeText(formatWritingPlan(writingPlan))
+    } catch {
+      alert('复制失败，请手动选择文本复制')
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center gap-2 text-sm text-text-muted mb-6">
@@ -210,6 +279,85 @@ export function WritePage() {
 
       <h1 className="text-2xl font-bold mb-1">AI写作</h1>
       <p className="text-text-secondary mb-6">{story?.title}{story ? ' &middot; ' + (story.rating === 'nsfw' ? '成人向' : '一般向') : ''}</p>
+      <AiErrorPanel diagnostic={aiError} onClose={() => setAiError(null)} />
+
+      <div className="bg-bg-card border border-border rounded-2xl p-5 shadow-sm mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold mb-1">
+              <Icon name="compass" className="w-4 h-4 inline mr-2 text-primary" />
+              AI 写作计划
+            </h2>
+            <p className="text-xs text-text-muted">
+              根据现有资料生成一份给你看的后续写作建议；不会保存，也不会参与后续大纲或正文生成。
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            {writingPlan && (
+              <button type="button" onClick={() => void copyWritingPlan()}
+                className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-xs transition-all">
+                复制
+              </button>
+            )}
+            <button type="button" onClick={() => void handleGenerateWritingPlan()} disabled={planning || generating}
+              className="px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-40 text-white rounded-xl text-xs font-medium transition-all flex items-center gap-1.5">
+              {planning ? <><div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" /> 规划中...</>
+                : <><Icon name="sparkle" className="w-3.5 h-3.5" /> 生成计划</>}
+            </button>
+          </div>
+        </div>
+
+        {writingPlan && (
+          <div className="mt-4 space-y-4">
+            <div className="bg-bg-dark border border-border rounded-xl p-4">
+              <p className="text-sm text-text-primary">{writingPlan.overview}</p>
+              <p className="text-xs text-text-muted mt-2">{writingPlan.currentStatus}</p>
+            </div>
+
+            {writingPlan.chapterPlans.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {writingPlan.chapterPlans.map(chapter => (
+                  <div key={chapter.number} className="bg-bg-dark border border-border rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-mono text-text-muted bg-bg-card px-2 py-0.5 rounded-lg">Ch.{chapter.number}</span>
+                      <span className="text-xs font-medium text-text-secondary">写作目标</span>
+                    </div>
+                    <p className="text-sm text-text-primary mb-2">{chapter.goal}</p>
+                    {chapter.keyEvents.length > 0 && (
+                      <p className="text-xs text-text-muted mb-1">事件：{chapter.keyEvents.join('；')}</p>
+                    )}
+                    {chapter.characterFocus.length > 0 && (
+                      <p className="text-xs text-text-muted mb-1">角色：{chapter.characterFocus.join('；')}</p>
+                    )}
+                    {chapter.notes && <p className="text-xs text-text-muted">提醒：{chapter.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(writingPlan.suggestions.length > 0 || writingPlan.risks.length > 0) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {writingPlan.suggestions.length > 0 && (
+                  <div className="bg-bg-dark border border-border rounded-xl p-3">
+                    <p className="text-xs font-medium text-text-secondary mb-2">建议</p>
+                    <ul className="space-y-1 text-xs text-text-muted">
+                      {writingPlan.suggestions.map((item, index) => <li key={index}>- {item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {writingPlan.risks.length > 0 && (
+                  <div className="bg-bg-dark border border-border rounded-xl p-3">
+                    <p className="text-xs font-medium text-text-secondary mb-2">风险提醒</p>
+                    <ul className="space-y-1 text-xs text-text-muted">
+                      {writingPlan.risks.map((item, index) => <li key={index}>- {item}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {phase === 'idle' && (
         <div className="max-w-xl mx-auto">
@@ -261,11 +409,25 @@ export function WritePage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-xs font-medium text-text-primary mb-1">最少字数/章</label>
-                  <input type="number" value={minWords} onChange={e => setConfig({ minWords: Number(e.target.value) })}
-                    className="w-full px-3 py-2.5 bg-bg-dark border border-border rounded-xl text-sm focus:border-primary focus:outline-none" /></div>
+                  <div className="flex overflow-hidden bg-bg-dark border border-border rounded-xl focus-within:border-primary">
+                    <button type="button" onClick={() => adjustWordSetting('minWords', -1000)}
+                      className={`${wordStepperButtonClass} border-r border-primary-dark/20`}>-</button>
+                    <input type="number" value={minWords} min={100} step={1000} onChange={e => setConfig({ minWords: Number(e.target.value) })}
+                      className="number-no-spin w-full px-3 py-2.5 bg-transparent text-sm text-center focus:outline-none" />
+                    <button type="button" onClick={() => adjustWordSetting('minWords', 1000)}
+                      className={`${wordStepperButtonClass} border-l border-primary-dark/20`}>+</button>
+                  </div>
+                </div>
                 <div><label className="block text-xs font-medium text-text-primary mb-1">最多字数/章</label>
-                  <input type="number" value={maxWords} onChange={e => setConfig({ maxWords: Number(e.target.value) })}
-                    className="w-full px-3 py-2.5 bg-bg-dark border border-border rounded-xl text-sm focus:border-primary focus:outline-none" /></div>
+                  <div className="flex overflow-hidden bg-bg-dark border border-border rounded-xl focus-within:border-primary">
+                    <button type="button" onClick={() => adjustWordSetting('maxWords', -1000)}
+                      className={`${wordStepperButtonClass} border-r border-primary-dark/20`}>-</button>
+                    <input type="number" value={maxWords} min={100} step={1000} onChange={e => setConfig({ maxWords: Number(e.target.value) })}
+                      className="number-no-spin w-full px-3 py-2.5 bg-transparent text-sm text-center focus:outline-none" />
+                    <button type="button" onClick={() => adjustWordSetting('maxWords', 1000)}
+                      className={`${wordStepperButtonClass} border-l border-primary-dark/20`}>+</button>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -336,19 +498,19 @@ export function WritePage() {
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={appendOutlineChapter}
-                className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
-                <Icon name="plus" className="w-4 h-4 inline mr-1" />添加章节
+                className={outlineActionButtonClass}>
+                <Icon name="plus" className="w-4 h-4" />添加章节
               </button>
               <button type="button" onClick={() => void clearOutline()}
-                className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
-                <Icon name="refresh" className="w-4 h-4 inline mr-1" />继续生成
+                className={outlineActionButtonClass}>
+                <Icon name="refresh" className="w-4 h-4" />继续生成
               </button>
               <button type="button" onClick={clearOutlineRange}
-                className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
+                className={outlineActionButtonClass}>
                 清空范围
               </button>
               <button type="button" onClick={clearUnwrittenOutline}
-                className="px-3 py-2 border border-border hover:bg-bg-dark text-text-secondary rounded-xl text-sm transition-all">
+                className={outlineActionButtonClass}>
                 清空未写
               </button>
             </div>
@@ -359,19 +521,33 @@ export function WritePage() {
               {/* Existing chapters (read-only) */}
               {existingChapters && existingChapters.length > 0 && (
                 <>
-                  <p className="text-xs text-text-muted font-medium px-1">已写章节</p>
-                  {existingChapters.map(ch => (
-                    <div key={ch.id} className="bg-bg-dark border border-border rounded-xl p-3 opacity-70">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-mono text-text-muted bg-bg-card px-2 py-0.5 rounded-lg">Ch.{ch.chapter_number}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success-bg text-success">已写</span>
-                      </div>
-                      <h3 className="font-medium text-sm text-text-secondary">{ch.title}</h3>
-                      <p className="text-xs text-text-muted mt-0.5">{ch.word_count.toLocaleString()} 字</p>
+                  <button type="button" onClick={() => setShowExistingChapters(value => !value)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-bg-dark border border-border rounded-xl text-xs text-text-secondary hover:border-primary/30 hover:text-primary transition-all">
+                    <span className="font-medium">已写章节 · {existingChapters.length} 章</span>
+                    <span className="flex items-center gap-1 text-text-muted">
+                      {showExistingChapters ? '收起' : '展开'}
+                      <Icon name="arrowRight" className={`w-3 h-3 transition-transform ${showExistingChapters ? 'rotate-90' : ''}`} />
+                    </span>
+                  </button>
+                  {showExistingChapters && (
+                    <div className="space-y-3">
+                      {existingChapters.map(ch => (
+                        <div key={ch.id} className="bg-bg-dark border border-border rounded-xl p-3 opacity-70">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-mono text-text-muted bg-bg-card px-2 py-0.5 rounded-lg">Ch.{ch.chapter_number}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success-bg text-success">已写</span>
+                          </div>
+                          <h3 className="font-medium text-sm text-text-secondary">{ch.title}</h3>
+                          <p className="text-xs text-text-muted mt-0.5">{ch.word_count.toLocaleString()} 字</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                   <div className="border-t border-border pt-2 mt-2">
-                    <p className="text-xs text-text-muted font-medium px-1 mb-1">新大纲（第{nextChapterNum}-{nextChapterNum + chapterCount - 1}章）</p>
+                    <p className="text-xs text-text-muted font-medium px-1 mb-1">
+                      {showExistingChapters ? '新大纲' : '大纲列表'}
+                      （第{nextChapterNum}-{nextChapterNum + chapterCount - 1}章）
+                    </p>
                   </div>
                 </>
               )}

@@ -66,6 +66,9 @@ export function BiblePage() {
       await updateStory(id!, { reference_style: form.reference_style })
       const result = await analyzeStoryStyle(id!)
       setStyleProfile(result.profile)
+      if (result.sourceLength > result.analyzedLength) {
+        alert(`文风分析完成：已从 ${result.sourceLength.toLocaleString()} 字符中抽样分析 ${result.analyzedLength.toLocaleString()} 字符`)
+      }
       await queryClient.invalidateQueries({ queryKey: ['story', id] })
     } catch (error) {
       alert('文风分析失败: ' + getApiErrorMessage(error))
@@ -163,7 +166,7 @@ export function BiblePage() {
             className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-xl text-sm focus:border-primary focus:outline-none resize-none placeholder:text-text-muted font-sans leading-relaxed" />
           <div className="flex items-center justify-between mt-2 text-xs text-text-muted">
             <span>{form.reference_style.length.toLocaleString()} 字符</span>
-            <span>分析最多读取 12,000 字符</span>
+            <span>分析最多抽样读取 60,000 字符</span>
           </div>
           <div className="flex gap-3 mt-3">
             <button type="button" onClick={handleSaveStyle} disabled={saving === 'style'}

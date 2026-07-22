@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Story, Chapter, Foreshadow, GenerateOptions, GeneratedChapter, GeneratedOutline, OutlineChapter, PlotData, StoryArc, TimelineEvent, WorldItem } from './types'
+import type { Story, Chapter, Foreshadow, GenerateOptions, GeneratedChapter, GeneratedOutline, OutlineChapter, PlotData, StoryArc, TimelineEvent, WorldItem, WritingPlan } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -13,6 +13,46 @@ export function getApiErrorMessage(error: unknown): string {
     return data?.error || error.message
   }
   return error instanceof Error ? error.message : '未知错误'
+}
+
+export interface ApiErrorDiagnostic {
+  title: string
+  message: string
+  code?: string
+  status?: number
+  method?: string
+  url?: string
+  details?: Array<{ field?: string; message?: string }> | unknown
+  raw?: unknown
+  createdAt: string
+}
+
+export function getApiErrorDiagnostic(error: unknown, title = 'AI 生成失败'): ApiErrorDiagnostic {
+  const createdAt = new Date().toLocaleString()
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as {
+      error?: string
+      code?: string
+      details?: Array<{ field?: string; message?: string }> | unknown
+      diagnostic?: unknown
+    } | undefined
+    return {
+      title,
+      message: data?.error || error.message,
+      code: data?.code || error.code,
+      status: error.response?.status,
+      method: error.config?.method?.toUpperCase(),
+      url: error.config?.url,
+      details: data?.details,
+      raw: data?.diagnostic || data,
+      createdAt,
+    }
+  }
+  return {
+    title,
+    message: error instanceof Error ? error.message : String(error || '未知错误'),
+    createdAt,
+  }
 }
 
 // Stories
@@ -74,6 +114,10 @@ export async function generateOutline(storyId: string, options: GenerateOptions)
 export async function generateChapter(storyId: string, options: GenerateOptions): Promise<GeneratedChapter> {
   const { data } = await api.post(`/stories/${storyId}/chapters/generate`, options)
   return data
+}
+
+export async function generateWritingPlan(storyId: string, input: { chapterStart?: number; chapterCount?: number; focus?: string }): Promise<WritingPlan> {
+  return (await api.post(`/stories/${storyId}/writing-plan/generate`, input)).data
 }
 
 export async function fetchWorldItems(storyId: string): Promise<WorldItem[]> {
